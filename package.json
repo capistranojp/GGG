@@ -38,7 +38,7 @@
       "last 1 firefox version",
       "last 1 safari version"
     ],
-    "homepage": "https://YOUR_USERNAME.github.io/YOUR_REPO_NAME",
+    "homepage": "https://capistranojp.github.io/YOUR_REPO_NAME",
     "scripts": {
       "predeploy": "npm run build",
       "deploy": "gh-pages -d build"
