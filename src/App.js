@@ -3,10 +3,11 @@ import { fetchGames, checkProxy } from "./igdb";
 
 // ─── Difficulty Config ────────────────────────────────────────────────────────
 const DIFF = {
-  easy:   { label: "Easy",   emoji: "🟢", blur: 12, step: 4,  attempts: 5, grayscale: false },
-  medium: { label: "Medium", emoji: "🟡", blur: 22, step: 6,  attempts: 3, grayscale: false },
-  hard:   { label: "Hard",   emoji: "🔴", blur: 32, step: 9,  attempts: 2, grayscale: true, freeHints: 1  },
+  easy:   { label: "Easy",   emoji: "🟢", blur: 12, step: 4,  grayscale: false, freeHints: 0 },
+  medium: { label: "Medium", emoji: "🟡", blur: 22, step: 6,  grayscale: false, freeHints: 0 },
+  hard:   { label: "Hard",   emoji: "🔴", blur: 32, step: 9,  grayscale: true,  freeHints: 1 },
 };
+// Attempts are always game.hints.length + 1 (dynamic), so every hint can be revealed before game over
 
 // ─── Mock Game Data (fallback when IGDB proxy is offline) ─────────────────────
 const MOCK_GAMES = [
@@ -134,13 +135,15 @@ export default function App() {
   const [streak, setStreak]         = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [shakeInput, setShakeInput] = useState(false);
+  const [cheating, setCheating]       = useState(false);
   const [loading, setLoading]       = useState(false);
   const [loadMsg, setLoadMsg]       = useState("");
   const [apiStatus, setApiStatus]   = useState(null); // string shown in banner
   const [usingMock, setUsingMock]   = useState(false);
   const inputRef = useRef(null);
-  const cfg  = DIFF[diff];
-  const game = queue[idx];
+  const cfg         = DIFF[diff];
+  const game        = queue[idx];
+  const maxAttempts = game ? game.hints.length + 1 : 4;
 
   // ── Load games (IGDB with mock fallback) ────────────────────────────────────
   const loadGames = useCallback(async (selectedDiff) => {
@@ -186,6 +189,7 @@ export default function App() {
     setAttempts(0);
     setStatus("playing");
     setToast(null);
+    setCheating(false);
   }
 
   function showToast(text, type = "info") {
@@ -194,7 +198,7 @@ export default function App() {
   }
 
   function getFilter(attemptsCount, revealed) {
-    if (revealed) return "none";
+    if (revealed || cheating) return "none";
     const c = DIFF[diff];
     const blurPx = Math.max(0, c.blur - attemptsCount * c.step);
     const gs = c.grayscale && attemptsCount === 0 ? "grayscale(100%) " : "";
@@ -203,6 +207,15 @@ export default function App() {
 
   function submitGuess() {
     if (!game || status !== "playing" || !guess.trim()) return;
+
+    // 🔓 Cheat code — reveals the cover without ending the game
+    if (guess.trim().toUpperCase() === "REVEAL") {
+      setCheating(true);
+      setGuess("");
+      showToast("🔓 Cover revealed — cheat mode!", "warn");
+      return;
+    }
+
     const g       = norm(guess);
     const correct = norm(game.title);
     const aliases = (game.aliases || []).map(norm);
@@ -223,16 +236,15 @@ export default function App() {
       setAttempts(na);
       setShakeInput(true);
       setTimeout(() => setShakeInput(false), 450);
-      if (na >= cfg.attempts) {
+      if (na >= maxAttempts) {
         setStreak(0);
         setStatus("lost");
         showToast(`💀 The answer was: ${game.title}`, "error");
       } else {
         setGuess("");
-        const hintsLeft = game.hints.length - na;
-        const hintMsg   = hintsLeft > 0 ? " — a new hint was revealed" : "";
+        const hintMsg = " — a new hint was revealed";
         showToast(
-          `❌ Not quite — ${cfg.attempts - na} attempt${cfg.attempts - na !== 1 ? "s" : ""} left${hintMsg}`,
+          `❌ Not quite — ${maxAttempts - na} attempt${maxAttempts - na !== 1 ? "s" : ""} left${hintMsg}`,
           "warn"
         );
       }
@@ -291,9 +303,9 @@ export default function App() {
           <div style={{ color:"#a0a0c0", fontWeight:600, marginBottom:4 }}>How to play</div>
           A blurred game cover is shown — type your best guess and press Enter.<br />
           Each wrong guess reveals a free hint and reduces the blur.<br />
-          {diff === "hard"   && <span style={{ color:"#e06c6c" }}>Hard mode: covers start grayscale, only 2 attempts — first hint is free.</span>}
-          {diff === "easy"   && <span style={{ color:"#6ce0a0" }}>Easy mode: 5 attempts, gently blurred covers.</span>}
-          {diff === "medium" && <span style={{ color:"#e0c96c" }}>Medium mode: 3 attempts, moderately blurred.</span>}
+          {diff === "hard"   && <span style={{ color:"#e06c6c" }}>Hard mode: covers start grayscale — first hint is free, hints+1 attempts.</span>}
+          {diff === "easy"   && <span style={{ color:"#6ce0a0" }}>Easy mode: lightly blurred covers, hints+1 attempts.</span>}
+          {diff === "medium" && <span style={{ color:"#e0c96c" }}>Medium mode: moderately blurred, hints+1 attempts.</span>}
         </div>
 
         <button className="action-btn" onClick={() => startGame(diff)} style={{
@@ -399,7 +411,7 @@ export default function App() {
         {/* Attempt lives */}
         {status === "playing" && (
           <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:18 }}>
-            {Array.from({ length: cfg.attempts }).map((_, i) => (
+            {Array.from({ length: maxAttempts }).map((_, i) => (
               <div key={i} style={{
                 width:32, height:8, borderRadius:4, transition:"background .3s",
                 background: i < attempts ? "#c0404050" : "#5050e050"
@@ -412,14 +424,14 @@ export default function App() {
         <div style={{ marginBottom:20 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
             <div style={{ fontSize:11, color:"#4a4a6a", letterSpacing:"0.1em", fontWeight:700 }}>HINTS</div>
-            {status === "playing" && attempts < game.hints.length && (
+            {status === "playing" && (cfg.freeHints + attempts) < game.hints.length && (
               <div style={{ fontSize:11, color:"#4a4a6a" }}>next hint unlocks after a wrong guess</div>
             )}
           </div>
           {game.hints.map((hint, i) => {
             const freeHints = cfg.freeHints ?? 0;
-            const unlocked  = i < freeHints || i < attempts || revealed;
-            const isNew     = i === attempts - 1 && status === "playing" && i >= freeHints;
+            const unlocked  = i < (freeHints + attempts) || revealed;
+            const isNew     = i === (freeHints + attempts) - 1 && status === "playing" && i >= freeHints;
             return (
               <div key={i} className={unlocked ? "fade-in" : ""} style={{
                 padding:"12px 16px", borderRadius:12, marginBottom:8,

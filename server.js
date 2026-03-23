@@ -53,7 +53,7 @@ app.use(cors({
     "http://localhost:3000",
     "https://capistranojp.github.io"
   ]
-})); // Only allow your React dev server
+}));// Only allow your React dev server
 app.use(express.json());
 
 // ── Health check ──────────────────────────────────────────────────────────────
