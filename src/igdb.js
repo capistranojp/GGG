@@ -6,7 +6,15 @@
  * without touching any game logic.
  */
 
-const PROXY = "http://localhost:3001/api/igdb";
+// In production (GitHub Pages), point to your deployed proxy URL.
+// Set REACT_APP_PROXY_URL in a .env.production file or your hosting env vars.
+// e.g. REACT_APP_PROXY_URL=https://your-proxy.onrender.com/api/igdb
+const PROXY = process.env.REACT_APP_PROXY_URL || "http://localhost:3001/api/igdb";
+
+// Same for the health check base
+const PROXY_BASE = process.env.REACT_APP_PROXY_URL
+  ? process.env.REACT_APP_PROXY_URL.replace("/api/igdb", "")
+  : "http://localhost:3001";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -128,7 +136,7 @@ export async function fetchGames(limit = 20, difficulty = "medium") {
  */
 export async function checkProxy() {
   try {
-    const res  = await fetch("http://localhost:3001/api/health", { signal: AbortSignal.timeout(3000) });
+    const res  = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     if (!data.hasCredentials) {
       return { ok: false, message: "Proxy is running but IGDB credentials are missing in .env" };

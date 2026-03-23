@@ -48,7 +48,12 @@ async function getTwitchToken() {
 }
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: "http://localhost:3000" })); // Only allow your React dev server
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://capistranojp.github.io"
+  ]
+})); // Only allow your React dev server
 app.use(express.json());
 
 // ── Health check ──────────────────────────────────────────────────────────────

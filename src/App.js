@@ -5,14 +5,14 @@ import { fetchGames, checkProxy } from "./igdb";
 const DIFF = {
   easy:   { label: "Easy",   emoji: "🟢", blur: 12, step: 4,  attempts: 5, grayscale: false },
   medium: { label: "Medium", emoji: "🟡", blur: 22, step: 6,  attempts: 3, grayscale: false },
-  hard:   { label: "Hard",   emoji: "🔴", blur: 32, step: 9,  attempts: 2, grayscale: true  },
+  hard:   { label: "Hard",   emoji: "🔴", blur: 32, step: 9,  attempts: 2, grayscale: true, freeHints: 1  },
 };
 
 // ─── Mock Game Data (fallback when IGDB proxy is offline) ─────────────────────
 const MOCK_GAMES = [
   {
     id: 1, title: "The Witcher 3: Wild Hunt",
-    cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/coaarl.webp",
+    cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co1rcb.jpg",
     year: 2015, genre: "RPG", studio: "CD Projekt Red",
     hints: ["An open-world dark fantasy game released in 2015", "You play as a professional monster hunter for hire", "The protagonist is named Geralt of Rivia"],
     aliases: ["witcher 3", "witcher3", "the witcher 3", "witcher"],
@@ -47,14 +47,14 @@ const MOCK_GAMES = [
   },
   {
     id: 6, title: "Hades",
-    cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/cob9kr.webp",
+    cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co2xt6.jpg",
     year: 2020, genre: "Roguelike", studio: "Supergiant Games",
     hints: ["A narrative-driven dungeon-crawling roguelike", "Based entirely on Greek mythology", "You play as Zagreus, who is trying to escape from his father"],
     aliases: ["hades"],
   },
   {
     id: 7, title: "Cyberpunk 2077",
-    cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/coaih8.webp",
+    cover: "https://images.igdb.com/igdb/image/upload/t_cover_big/co4hk5.jpg",
     year: 2020, genre: "RPG", studio: "CD Projekt Red",
     hints: ["Set in a sprawling dystopian megacity of the future", "The main hub is a place called Night City", "Keanu Reeves stars as a digital ghost named Johnny Silverhand"],
     aliases: ["cyberpunk", "cp2077", "cyber punk 2077"],
@@ -291,7 +291,7 @@ export default function App() {
           <div style={{ color:"#a0a0c0", fontWeight:600, marginBottom:4 }}>How to play</div>
           A blurred game cover is shown — type your best guess and press Enter.<br />
           Each wrong guess reveals a free hint and reduces the blur.<br />
-          {diff === "hard"   && <span style={{ color:"#e06c6c" }}>Hard mode: covers start grayscale, only 2 attempts.</span>}
+          {diff === "hard"   && <span style={{ color:"#e06c6c" }}>Hard mode: covers start grayscale, only 2 attempts — first hint is free.</span>}
           {diff === "easy"   && <span style={{ color:"#6ce0a0" }}>Easy mode: 5 attempts, gently blurred covers.</span>}
           {diff === "medium" && <span style={{ color:"#e0c96c" }}>Medium mode: 3 attempts, moderately blurred.</span>}
         </div>
@@ -417,8 +417,9 @@ export default function App() {
             )}
           </div>
           {game.hints.map((hint, i) => {
-            const unlocked = i < attempts || revealed;
-            const isNew    = i === attempts - 1 && status === "playing";
+            const freeHints = cfg.freeHints ?? 0;
+            const unlocked  = i < freeHints || i < attempts || revealed;
+            const isNew     = i === attempts - 1 && status === "playing" && i >= freeHints;
             return (
               <div key={i} className={unlocked ? "fade-in" : ""} style={{
                 padding:"12px 16px", borderRadius:12, marginBottom:8,
@@ -431,7 +432,7 @@ export default function App() {
                 <span style={{ lineHeight:1.5 }}>
                   {unlocked
                     ? <>{hint}{isNew && <span style={{ marginLeft:8, fontSize:11, color:"#7c6af6", fontWeight:600 }}>NEW</span>}</>
-                    : `Hint ${i + 1} — unlocks after wrong guess ${i + 1}`}
+                    : `Hint ${i + 1} — unlocks after wrong guess ${i + 1 - (cfg.freeHints ?? 0)}`}
                 </span>
               </div>
             );
