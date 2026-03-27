@@ -140,13 +140,14 @@ export default function App() {
   const [loadMsg, setLoadMsg]       = useState("");
   const [apiStatus, setApiStatus]   = useState(null); // string shown in banner
   const [usingMock, setUsingMock]   = useState(false);
+  const [seenIds, setSeenIds]         = useState(new Set());
   const inputRef = useRef(null);
   const cfg         = DIFF[diff];
   const game        = queue[idx];
   const maxAttempts = game ? game.hints.length + 1 : 4;
 
   // ── Load games (IGDB with mock fallback) ────────────────────────────────────
-  const loadGames = useCallback(async (selectedDiff) => {
+  const loadGames = useCallback(async (selectedDiff, currentSeenIds = new Set()) => {
     setLoading(true);
     setLoadMsg("Checking API connection…");
 
@@ -156,7 +157,12 @@ export default function App() {
     if (proxy.ok) {
       try {
         setLoadMsg("Fetching games from IGDB…");
-        const games = await fetchGames(20, selectedDiff);
+        const excludeIds = [...currentSeenIds];
+        const games = await fetchGames(50, selectedDiff, excludeIds);
+        // Track these IDs as seen
+        const newSeen = new Set(currentSeenIds);
+        games.forEach((g) => newSeen.add(g.id));
+        setSeenIds(newSeen);
         setQueue(shuffle(games));
         setUsingMock(false);
         setLoading(false);
@@ -180,8 +186,9 @@ export default function App() {
     setScore(0);
     setStreak(0);
     setIdx(0);
+    setSeenIds(new Set());
     setScreen("game");
-    await loadGames(d);
+    await loadGames(d, new Set());
   }
 
   function resetRound() {
@@ -254,8 +261,8 @@ export default function App() {
   async function nextGame() {
     const ni = idx + 1;
     if (ni >= queue.length) {
-      // Refetch a fresh batch from IGDB when queue runs out
-      await loadGames(diff);
+      // Refetch a fresh batch, excluding all games seen this session
+      await loadGames(diff, seenIds);
       setIdx(0);
     } else {
       setIdx(ni);

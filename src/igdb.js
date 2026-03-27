@@ -33,30 +33,62 @@ const toStudio = (companies = []) => {
   return dev?.company?.name ?? companies[0]?.company?.name ?? "Unknown Studio";
 };
 
-/** Build up to 3 hint strings from IGDB fields */
+/** Build up to 4 hint strings from IGDB fields */
 const toHints = (game) => {
   const hints = [];
 
+  // Hint 1 — Genre (least revealing)
   if (game.genres?.length) {
     const genreNames = game.genres.map((g) => g.name).join(", ");
     hints.push(`This is a ${genreNames} game.`);
   }
 
+  // Hint 2 — Release year
   if (game.first_release_date) {
     hints.push(`It was first released in ${toYear(game.first_release_date)}.`);
   }
 
+  // Hint 3 — Developer studio
+  const studio = toStudio(game.involved_companies ?? []);
+  if (studio && studio !== "Unknown Studio") {
+    hints.push(`It was developed by ${studio}.`);
+  }
+
+  // Hint 4 — Redacted summary sentence (most revealing, so last)
   if (game.summary) {
-    // Use only the first sentence of the summary so it's not too obvious
     const firstSentence = game.summary.split(/[.!?]/)[0].trim();
-    if (firstSentence.length > 20) hints.push(firstSentence + ".");
+    if (firstSentence.length > 20) {
+      hints.push(redactTitle(firstSentence, game.name) + ".");
+    }
   }
 
   // Fallback if data is sparse
   if (hints.length === 0) hints.push("No hints available for this game.");
 
-  return hints.slice(0, 3);
+  return hints;
 };
+
+/**
+ * Replace any occurrence of the game title (or significant words from it)
+ * in a hint string with "this game" so the answer isn't given away.
+ */
+function redactTitle(text, title) {
+  if (!title) return text;
+
+  // Build variants to redact: full title + each word over 3 chars
+  const variants = [title];
+  title.split(/\s+/).forEach((word) => {
+    const clean = word.replace(/[^a-zA-Z0-9]/g, "");
+    if (clean.length > 3) variants.push(clean);
+  });
+
+  let result = text;
+  variants.forEach((v) => {
+    const escaped = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(escaped, "gi"), "this game");
+  });
+  return result;
+}
 
 /** Build a list of lowercase aliases for flexible answer matching */
 const toAliases = (game) => {
@@ -91,15 +123,19 @@ export function transformGame(raw) {
  * @param {number} limit  How many games to fetch (max 500 per IGDB rules)
  * @param {string} difficulty  "easy" | "medium" | "hard" — adjusts rating threshold
  */
-export async function fetchGames(limit = 20, difficulty = "medium") {
+export async function fetchGames(limit = 50, difficulty = "medium", excludeIds = []) {
   // More popular games on easy (recognisable covers), niche games on hard
   const ratingThresholds = { easy: 100, medium: 20, hard: 5 };
   const minRatings = ratingThresholds[difficulty] ?? 20;
 
-  // Random offset for variety — keep low to stay within available results
-  const offset = Math.floor(Math.random() * 50);
+  // Larger random offset for more variety across sessions
+  const offset = Math.floor(Math.random() * 300);
 
-  const query = `fields name, cover.url, first_release_date, genres.name, involved_companies.developer, involved_companies.company.name, summary, alternative_names.name, rating_count; where cover != null & rating_count > ${minRatings}; sort rating_count desc; limit ${limit}; offset ${offset};`;
+  // Exclude already-seen game IDs so we never repeat
+  const exclusion = excludeIds.length > 0
+    ? ` & id != (${excludeIds.join(",")})` : "";
+
+  const query = `fields name, cover.url, first_release_date, genres.name, involved_companies.developer, involved_companies.company.name, summary, alternative_names.name, rating_count; where cover != null & rating_count > ${minRatings}${exclusion}; sort rating_count desc; limit ${limit}; offset ${offset};`;
 
   const res = await fetch(`${PROXY}/games`, {
     method:  "POST",
