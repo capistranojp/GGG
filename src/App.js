@@ -141,7 +141,8 @@ export default function App() {
   const [apiStatus, setApiStatus]   = useState(null); // string shown in banner
   const [usingMock, setUsingMock]   = useState(false);
   const [seenIds, setSeenIds]         = useState(new Set());
-  const inputRef = useRef(null);
+  const inputRef  = useRef(null);
+  const canvasRef  = useRef(null);
   const cfg         = DIFF[diff];
   const game        = queue[idx];
   const maxAttempts = game ? game.hints.length + 1 : 4;
@@ -207,7 +208,10 @@ export default function App() {
   function getFilter(attemptsCount, revealed) {
     if (revealed || cheating) return "none";
     const c = DIFF[diff];
-    const blurPx = Math.max(0, c.blur - attemptsCount * c.step);
+    const rawBlur = c.blur - attemptsCount * c.step;
+    // Easy mode goes all the way to 0; other modes floor at 5px while still playing
+    const minBlur = c.label === "Easy" ? 0 : 5;
+    const blurPx  = Math.max(minBlur, rawBlur);
     const gs = c.grayscale && attemptsCount === 0 ? "grayscale(100%) " : "";
     return `${gs}blur(${blurPx}px)`;
   }
@@ -275,6 +279,30 @@ export default function App() {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [screen, idx, status]);
+
+  // Draw game cover onto canvas so the real URL is never in the DOM
+  useEffect(() => {
+    if (!game?.cover || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx    = canvas.getContext("2d");
+    const img    = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      canvas.width  = 210;
+      canvas.height = 280;
+      ctx.drawImage(img, 0, 0, 210, 280);
+    };
+    img.onerror = () => {
+      // Draw a fallback placeholder if image fails
+      ctx.fillStyle = "#161622";
+      ctx.fillRect(0, 0, 210, 280);
+      ctx.fillStyle = "#3a3a5a";
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Cover", 105, 145);
+    };
+    img.src = game.cover;
+  }, [game]);
 
   // ── Loading screen ──────────────────────────────────────────────────────────
   if (loading) return <LoadingScreen message={loadMsg} />;
@@ -387,12 +415,12 @@ export default function App() {
         {/* Cover art */}
         <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
           <div style={{ position:"relative", borderRadius:16, overflow:"hidden", boxShadow:"0 8px 40px rgba(0,0,0,0.6)" }}>
-            <img
+            <canvas
+              ref={canvasRef}
               className="cover-img"
-              src={game.cover}
-              alt="Game cover"
-              style={{ width:210, height:280, objectFit:"cover", display:"block", filter:coverFilter }}
-              onError={(e) => { e.target.onerror = null; e.target.src = "https://placehold.co/210x280/161622/3a3a5a?text=Cover"; }}
+              width={210}
+              height={280}
+              style={{ width:210, height:280, display:"block", filter:coverFilter, userSelect:"none", pointerEvents:"none" }}
             />
             {status === "won" && (
               <div className="fade-in" style={{ position:"absolute", inset:0, background:"rgba(80,200,120,0.2)", display:"flex", alignItems:"center", justifyContent:"center" }}>
