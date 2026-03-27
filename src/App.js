@@ -220,7 +220,7 @@ export default function App() {
     if (!game || status !== "playing" || !guess.trim()) return;
 
     // 🔓 Cheat code — reveals the cover without ending the game
-    if (guess.trim().toUpperCase() === "REVEAL") {
+    if (guess.trim().toUpperCase() === "R3V34L") {
       setCheating(true);
       setGuess("");
       showToast("🔓 Cover revealed — cheat mode!", "warn");
