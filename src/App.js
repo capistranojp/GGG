@@ -182,6 +182,31 @@ export default function App() {
     setLoading(false);
   }, []);
 
+  // ── Silent background fetch — replaces the queue every 5 min, no repeats ──
+  const backgroundFetch = useCallback(async (selectedDiff, currentSeenIds, currentGame) => {
+    if (usingMock) return;
+    try {
+      const excludeIds = [...currentSeenIds];
+      const games = await fetchGames(50, selectedDiff, excludeIds);
+      if (!games.length) return;
+
+      // Track new IDs as seen
+      const newSeen = new Set(currentSeenIds);
+      games.forEach((g) => newSeen.add(g.id));
+      setSeenIds(newSeen);
+
+      // Put the current game first so idx=0 still points to it,
+      // then fill the rest with the fresh shuffled batch (excluding current)
+      const rest = shuffle(games.filter((g) => g.id !== currentGame?.id));
+      setQueue(currentGame ? [currentGame, ...rest] : rest);
+      setIdx(0);
+
+      console.log(`🎮 Background refresh: queue replaced with ${rest.length} new games`);
+    } catch (err) {
+      console.warn("Background fetch failed silently:", err.message);
+    }
+  }, [usingMock]);
+
   // ── Start game ──────────────────────────────────────────────────────────────
   async function startGame(d) {
     setDiff(d);
@@ -294,6 +319,16 @@ export default function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [status]);
+
+  // Background refresh every 5 minutes while on the game screen
+  useEffect(() => {
+    if (screen !== "game") return;
+    const FIVE_MINUTES = 5 * 60 * 1000;
+    const timer = setInterval(() => {
+      backgroundFetch(diff, seenIds, game);
+    }, FIVE_MINUTES);
+    return () => clearInterval(timer);
+  }, [screen, diff, seenIds, backgroundFetch]);
 
   // Draw game cover onto canvas so the real URL is never in the DOM
   useEffect(() => {
