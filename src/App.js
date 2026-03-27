@@ -141,8 +141,10 @@ export default function App() {
   const [apiStatus, setApiStatus]   = useState(null); // string shown in banner
   const [usingMock, setUsingMock]   = useState(false);
   const [seenIds, setSeenIds]         = useState(new Set());
-  const inputRef  = useRef(null);
-  const canvasRef  = useRef(null);
+  const inputRef      = useRef(null);
+  const canvasRef      = useRef(null);
+  const guessHistory   = useRef([]);   // past guesses this round
+  const historyCursor  = useRef(-1);   // -1 = not browsing history
   const cfg         = DIFF[diff];
   const game        = queue[idx];
   const maxAttempts = game ? game.hints.length + 1 : 4;
@@ -198,6 +200,8 @@ export default function App() {
     setStatus("playing");
     setToast(null);
     setCheating(false);
+    guessHistory.current  = [];
+    historyCursor.current = -1;
   }
 
   function showToast(text, type = "info") {
@@ -220,7 +224,7 @@ export default function App() {
     if (!game || status !== "playing" || !guess.trim()) return;
 
     // 🔓 Cheat code — reveals the cover without ending the game
-    if (guess.trim().toUpperCase() === "R3V34L") {
+    if (guess.trim().toUpperCase() === "REVEAL") {
       setCheating(true);
       setGuess("");
       showToast("🔓 Cover revealed — cheat mode!", "warn");
@@ -243,6 +247,9 @@ export default function App() {
         "success"
       );
     } else {
+      // Save this wrong guess to history (like command prompt)
+      guessHistory.current = [guess.trim(), ...guessHistory.current];
+      historyCursor.current = -1;
       const na = attempts + 1;
       setAttempts(na);
       setShakeInput(true);
@@ -279,6 +286,14 @@ export default function App() {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [screen, idx, status]);
+
+  // Press Enter after round ends to go to next game
+  useEffect(() => {
+    if (status === "playing") return;
+    const handler = (e) => { if (e.key === "Enter") nextGame(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [status]);
 
   // Draw game cover onto canvas so the real URL is never in the DOM
   useEffect(() => {
@@ -494,7 +509,28 @@ export default function App() {
               className="guess-input"
               value={guess}
               onChange={(e) => setGuess(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitGuess()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  submitGuess();
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  const hist = guessHistory.current;
+                  if (hist.length === 0) return;
+                  const next = Math.min(historyCursor.current + 1, hist.length - 1);
+                  historyCursor.current = next;
+                  setGuess(hist[next]);
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  const next = historyCursor.current - 1;
+                  if (next < 0) {
+                    historyCursor.current = -1;
+                    setGuess("");
+                  } else {
+                    historyCursor.current = next;
+                    setGuess(guessHistory.current[next]);
+                  }
+                }
+              }}
               placeholder="Type the game title and press Enter…"
               style={{ flex:1, padding:"13px 16px", borderRadius:12, border:"1px solid #2a2a40", background:"#0e0e1c", color:"#f0f0fa", fontSize:15, transition:"border-color .2s, box-shadow .2s" }}
             />
