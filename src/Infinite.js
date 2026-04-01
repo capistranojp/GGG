@@ -1,17 +1,15 @@
-/**
- * src/Infinite.js — Infinite mode (normal + speedrun) with categories.
- */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { fetchGames, checkProxy, CATEGORIES } from "./igdb";
+import { saveScore, getLeaderboard } from "./supabase";
+import { useUser } from "./UserContext";
 import GameBoard from "./GameBoard";
 
-const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
-
 const SPIN_CSS = `@keyframes spin { to { transform:rotate(360deg); } }`;
+const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
 
 const MOCK_GAMES = [
   { id:1,title:"The Witcher 3: Wild Hunt",cover:"https://images.igdb.com/igdb/image/upload/t_cover_big/co1rcb.jpg",year:2015,genre:"RPG",studio:"CD Projekt Red",hints:["This is a RPG game.","It was first released in 2015.","It was developed by CD Projekt Red.","this game is an action role-playing game."],aliases:["witcher 3","the witcher 3","witcher"] },
-  { id:2,title:"God of War",cover:"https://images.igdb.com/igdb/image/upload/t_cover_big/co1tmu.jpg",year:2018,genre:"Action-Adventure",studio:"Santa Monica Studio",hints:["This is an Action-Adventure game.","It was first released in 2018.","It was developed by Santa Monica Studio.","this game is set in the world of Norse mythology."],aliases:["god of war 2018","gow"] },
+  { id:2,title:"God of War",cover:"https://images.igdb.com/igdb/image/upload/t_cover_big/co1tmu.jpg",year:2018,genre:"Action-Adventure",studio:"Santa Monica Studio",hints:["This is an Action-Adventure game.","It was first released in 2018.","It was developed by Santa Monica Studio.","this game is set in Norse mythology."],aliases:["god of war 2018","gow"] },
   { id:3,title:"Elden Ring",cover:"https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg",year:2022,genre:"Action RPG",studio:"FromSoftware",hints:["This is an Action RPG game.","It was first released in 2022.","It was developed by FromSoftware.","this game is set in the Lands Between."],aliases:["elden ring","eldenring"] },
   { id:4,title:"Minecraft",cover:"https://images.igdb.com/igdb/image/upload/t_cover_big/co49x5.jpg",year:2011,genre:"Sandbox",studio:"Mojang Studios",hints:["This is a Sandbox game.","It was first released in 2011.","It was developed by Mojang Studios.","this game is one of the best-selling games ever."],aliases:["mine craft","mc"] },
   { id:5,title:"Hades",cover:"https://images.igdb.com/igdb/image/upload/t_cover_big/co2xt6.jpg",year:2020,genre:"Roguelike",studio:"Supergiant Games",hints:["This is a Roguelike game.","It was first released in 2020.","It was developed by Supergiant Games.","this game is set in the Greek underworld."],aliases:["hades"] },
@@ -24,7 +22,6 @@ const DIFF_CFG = {
   hard:   { label:"Hard",   emoji:"🔴", blurStart:32, blurStep:9, blurMin:5, grayscale:true,  freeHints:1, scoreMult:1.5,  minRatings:5   },
 };
 
-// Speedrun pool sizes — approximate "top N" via minRatings thresholds
 const SR_POOLS = [
   { label:"Top 10",  value:10,  minRatings:3000, desc:"Very famous" },
   { label:"Top 50",  value:50,  minRatings:800,  desc:"Well-known"  },
@@ -33,37 +30,25 @@ const SR_POOLS = [
 ];
 
 const SR_TIMES = [
-  { label:"30s",  value:30  },
-  { label:"1 min",value:60  },
-  { label:"2 min",value:120 },
-  { label:"5 min",value:300 },
+  { label:"30s",   value:30  },
+  { label:"1 min", value:60  },
+  { label:"2 min", value:120 },
+  { label:"5 min", value:300 },
 ];
 
-// ── Leaderboard (localStorage) ─────────────────────────────────────────────────
-const LB_KEY = "ggg_lb";
-function getLB(mode) {
-  try { return JSON.parse(localStorage.getItem(`${LB_KEY}_${mode}`)) || []; } catch { return []; }
-}
-function addLB(mode, entry) {
-  const b = getLB(mode);
-  b.push({ ...entry, date: new Date().toISOString().slice(0, 10) });
-  b.sort((a, b) => b.score - a.score);
-  b.splice(10);
-  localStorage.setItem(`${LB_KEY}_${mode}`, JSON.stringify(b));
-  return b;
-}
-
-function LeaderboardTable({ mode, accent = "#7c6af6" }) {
-  const board = getLB(mode);
-  if (!board.length) return <p style={{ color:"#3a3a5a", fontSize:13, textAlign:"center", padding:"12px 0" }}>No scores yet</p>;
+function LBTable({ rows, accent = "#7c6af6", valueKey = "score", valueFmt }) {
+  if (!rows?.length) return <p style={{ color:"#3a3a5a", fontSize:12, textAlign:"center", padding:"10px 0" }}>No scores yet — be first!</p>;
   const medals = ["🥇","🥈","🥉"];
   return (
-    <div style={{ background:"#0a0a18", borderRadius:12, padding:"12px 14px", marginTop:12 }}>
-      <div style={{ fontSize:10, color:"#4a4a6a", fontWeight:700, letterSpacing:".1em", marginBottom:8 }}>TOP SCORES</div>
-      {board.map((e, i) => (
-        <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom: i<board.length-1?"1px solid #1a1a28":"none", fontSize:13 }}>
-          <span style={{ color: i<3?["#f0c030","#c0c0c0","#cd7f32"][i]:"#4a4a6a" }}>{medals[i]||`${i+1}.`} {e.label || (e.games!=null?`${e.games} games`:`${e.score} pts`)}</span>
-          <span style={{ fontWeight:600, color: i===0?accent:"#6b6b8a" }}>{e.score.toLocaleString()} pts</span>
+    <div style={{ background:"#0a0a14", borderRadius:10, overflow:"hidden", marginTop:10 }}>
+      <div style={{ fontSize:10, color:"#3a3a5a", fontWeight:700, letterSpacing:".1em", padding:"8px 12px" }}>TOP SCORES</div>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 12px", borderTop:"1px solid #111120", fontSize:12 }}>
+          <span style={{ color: i<3?["#f0c030","#c0c0c0","#cd7f32"][i]:"#3a3a5a", minWidth:24 }}>{medals[i]||`${i+1}.`}</span>
+          <span style={{ flex:1, color:"#c0c0e0", fontWeight:i===0?700:400 }}>{r.username}</span>
+          <span style={{ color:i===0?accent:"#5a5a7a", fontWeight:i===0?700:400 }}>
+            {valueFmt ? valueFmt(r) : r[valueKey].toLocaleString()}
+          </span>
         </div>
       ))}
     </div>
@@ -71,12 +56,13 @@ function LeaderboardTable({ mode, accent = "#7c6af6" }) {
 }
 
 export default function Infinite({ onBack, defaultTab = "normal" }) {
-  const [tab,       setTab]       = useState(defaultTab); // "normal" | "speedrun"
+  const { userId, username } = useUser();
+  const [tab,       setTab]       = useState(defaultTab);
   const [diff,      setDiff]      = useState("medium");
   const [category,  setCategory]  = useState("random");
   const [srTime,    setSrTime]    = useState(60);
   const [srPool,    setSrPool]    = useState(50);
-  const [phase,     setPhase]     = useState("setup"); // setup | playing | done
+  const [phase,     setPhase]     = useState("setup");
   const [queue,     setQueue]     = useState([]);
   const [idx,       setIdx]       = useState(0);
   const [loading,   setLoading]   = useState(false);
@@ -87,9 +73,20 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   const [seenIds,   setSeenIds]   = useState(new Set());
   const [timeLeft,  setTimeLeft]  = useState(0);
   const [srCorrect, setSrCorrect] = useState(0);
+  const [leaderboard, setLeaderboard] = useState([]);
   const timerRef     = useRef(null);
   const srCorrectRef = useRef(0);
   const cfg = DIFF_CFG[diff];
+  const game = queue[idx];
+
+  // Load leaderboard for current tab/diff/time
+  useEffect(() => {
+    if (phase !== "setup") return;
+    const params = tab === "speedrun"
+      ? { mode:"speedrun", timeLimit:srTime }
+      : { mode:"infinite", difficulty:diff };
+    getLeaderboard({ ...params, limit:10 }).then(setLeaderboard);
+  }, [phase, tab, diff, srTime]);
 
   const loadGames = useCallback(async (d, cat, seen, minRat) => {
     setLoading(true);
@@ -99,7 +96,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
         const games = await fetchGames(50, d, [...seen], cat, minRat ?? null);
         const ns = new Set(seen); games.forEach(g => ns.add(g.id));
         setSeenIds(ns);
-        setQueue(g => phase==="setup" ? shuffle(games) : [...g.slice(0,idx+1), ...shuffle(games)]);
+        setQueue(prev => phase === "setup" ? shuffle(games) : [...prev.slice(0, idx+1), ...shuffle(games)]);
         setUsingMock(false); setLoading(false); return;
       } catch (_) {}
     }
@@ -111,18 +108,20 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     setScore(0); setStreak(0); setBest(0); setIdx(0); setSeenIds(seen); setPhase("playing");
     if (tab === "speedrun") { setSrCorrect(0); srCorrectRef.current = 0; setTimeLeft(srTime); }
     const poolCfg = SR_POOLS.find(p => p.value === srPool);
-    loadGames(diff, category, seen, tab==="speedrun" ? poolCfg?.minRatings : null);
+    loadGames(diff, category, seen, tab === "speedrun" ? poolCfg?.minRatings : null);
   }
 
-  // Speedrun timer
+  // Speedrun countdown
   useEffect(() => {
     if (tab !== "speedrun" || phase !== "playing") return;
     timerRef.current = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) {
           clearInterval(timerRef.current);
+          const final = srCorrectRef.current;
           setPhase("done");
-          addLB(`sr_${srTime}`, { score: srCorrect * 100, games: srCorrect, label: `${srCorrect} games`, diff });
+          // Save to Supabase
+          saveScore({ userId, username, mode:"speedrun", score:final*100, difficulty:diff, gamesCorrect:final, timeLimit:srTime });
           return 0;
         }
         return t - 1;
@@ -131,25 +130,24 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     return () => clearInterval(timerRef.current);
   }, [phase, tab]); // eslint-disable-line
 
-  // Background refresh every 5 min (normal mode only)
+  // Background refresh every 5 min
   useEffect(() => {
     if (phase !== "playing" || tab !== "normal" || usingMock) return;
     const t = setInterval(() => {
-      const g = queue[idx];
-      const rest = shuffle(queue.filter(x => x.id !== g?.id).map(x=>x)).slice(0,1);
       fetchGames(50, diff, [...seenIds], category).then(games => {
-        const ns = new Set(seenIds); games.forEach(x=>ns.add(x.id));
+        const ns = new Set(seenIds); games.forEach(x => ns.add(x.id));
         setSeenIds(ns);
-        setQueue(g ? [g, ...shuffle(games.filter(x=>x.id!==g.id))] : shuffle(games));
+        const cur = queue[idx];
+        setQueue(cur ? [cur, ...shuffle(games.filter(x => x.id !== cur.id))] : shuffle(games));
         setIdx(0);
-      }).catch(()=>{});
-    }, 5*60*1000);
+      }).catch(() => {});
+    }, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [phase, tab, usingMock, diff, category]); // eslint-disable-line
 
   function calcScore(att) {
     const base = Math.max(100, 1000 - att * 150);
-    const sm   = streak >= 10 ? 3 : streak >= 5 ? 2 : streak >= 3 ? 1.5 : 1;
+    const sm = streak >= 10 ? 3 : streak >= 5 ? 2 : streak >= 3 ? 1.5 : 1;
     return Math.round(base * cfg.scoreMult * sm);
   }
 
@@ -157,17 +155,14 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     const pts = calcScore(att);
     setScore(s => s + pts);
     const ns = streak + 1; setStreak(ns); setBest(b => Math.max(b, ns));
-    if (tab === "speedrun") {
-      setSrCorrect(c => c + 1);
-      srCorrectRef.current += 1;
-    }
+    if (tab === "speedrun") { setSrCorrect(c => c + 1); srCorrectRef.current += 1; }
   }
 
   function handleLose() { setStreak(0); }
 
-  function handleEndSession() {
+  async function handleEndSession() {
     if (tab === "normal" && score > 0) {
-      addLB(`inf_${diff}`, { score, games: idx + 1, label: `${idx + 1} games · ${streak} streak`, diff });
+      await saveScore({ userId, username, mode:"infinite", score, difficulty:diff, category, gamesCorrect:idx+1 });
     }
     onBack();
   }
@@ -178,101 +173,95 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     else setIdx(ni);
   }
 
-  const game = queue[idx];
-
-  // ── Setup screen ──────────────────────────────────────────────────────────────
+  // ── Setup ─────────────────────────────────────────────────────────────────────
   if (phase === "setup") return (
     <div style={{ maxWidth:520, margin:"0 auto" }}>
-
-      {/* Sub-mode tabs */}
-      <div style={{ display:"flex", gap:4, background:"#0e0e1c", borderRadius:12, padding:4, marginBottom:22 }}>
-        {[["normal","♾️ Infinite"],["speedrun","⚡ Speedrun"]].map(([m,l]) => (
-          <button key={m} onClick={() => setTab(m)} style={{ flex:1, padding:"10px", borderRadius:9, border:"none", background: tab===m?"linear-gradient(135deg,#7c6af6,#9b87f8)":"transparent", color: tab===m?"#fff":"#6b6b8a", cursor:"pointer", fontWeight: tab===m?700:400, fontSize:13, transition:"all .2s" }}>
-            {l}
-          </button>
+      <div style={{ display:"flex", gap:4, background:"#0e0e1c", borderRadius:12, padding:4, marginBottom:20 }}>
+        {[["normal","♾️ Infinite"],["speedrun","⚡ Speedrun"]].map(([m,l])=>(
+          <button key={m} onClick={()=>setTab(m)} style={{ flex:1, padding:"10px", borderRadius:9, border:"none", background:tab===m?"linear-gradient(135deg,#7c6af6,#9b87f8)":"transparent", color:tab===m?"#fff":"#6b6b8a", cursor:"pointer", fontWeight:tab===m?700:400, fontSize:13, transition:"all .2s" }}>{l}</button>
         ))}
       </div>
 
-      {/* Difficulty */}
-      <div style={{ marginBottom:18 }}>
+      <div style={{ marginBottom:16 }}>
         <div style={{ fontSize:10, color:"#4a4a6a", fontWeight:700, letterSpacing:".1em", marginBottom:8 }}>DIFFICULTY</div>
         <div style={{ display:"flex", gap:8 }}>
-          {Object.entries(DIFF_CFG).map(([k,v]) => (
-            <button key={k} onClick={() => setDiff(k)} style={{ flex:1, padding:"10px 8px", borderRadius:10, border: diff===k?"2px solid #7c6af6":"1px solid #2a2a40", background: diff===k?"rgba(124,106,246,.12)":"#111120", color: diff===k?"#a99ef8":"#6b6b8a", cursor:"pointer", fontSize:12, fontWeight: diff===k?700:400, transition:"all .2s", textAlign:"center" }}>
+          {Object.entries(DIFF_CFG).map(([k,v])=>(
+            <button key={k} onClick={()=>setDiff(k)} style={{ flex:1, padding:"10px 8px", borderRadius:10, border:diff===k?"2px solid #7c6af6":"1px solid #2a2a40", background:diff===k?"rgba(124,106,246,.12)":"#111120", color:diff===k?"#a99ef8":"#6b6b8a", cursor:"pointer", fontSize:12, fontWeight:diff===k?700:400, textAlign:"center" }}>
               <div>{v.emoji}</div><div style={{ marginTop:2 }}>{v.label}</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Categories — only for normal mode */}
       {tab === "normal" && (
-        <div style={{ marginBottom:18 }}>
+        <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:10, color:"#4a4a6a", fontWeight:700, letterSpacing:".1em", marginBottom:8 }}>CATEGORY</div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-            {Object.entries(CATEGORIES).map(([k,v]) => (
-              <button key={k} onClick={() => setCategory(k)} style={{ padding:"5px 11px", borderRadius:20, border: category===k?"1.5px solid #7c6af6":"1px solid #2a2a40", background: category===k?"rgba(124,106,246,.12)":"#111120", color: category===k?"#a99ef8":"#5a5a7a", cursor:"pointer", fontSize:12, fontWeight: category===k?600:400, transition:"all .2s" }}>
-                {v.label}
-              </button>
+            {Object.entries(CATEGORIES).map(([k,v])=>(
+              <button key={k} onClick={()=>setCategory(k)} style={{ padding:"5px 11px", borderRadius:20, border:category===k?"1.5px solid #7c6af6":"1px solid #2a2a40", background:category===k?"rgba(124,106,246,.12)":"#111120", color:category===k?"#a99ef8":"#5a5a7a", cursor:"pointer", fontSize:12, fontWeight:category===k?600:400 }}>{v.label}</button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Speedrun options */}
       {tab === "speedrun" && (
         <>
-          <div style={{ marginBottom:18 }}>
+          <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:10, color:"#4a4a6a", fontWeight:700, letterSpacing:".1em", marginBottom:8 }}>TIME LIMIT</div>
             <div style={{ display:"flex", gap:8 }}>
-              {SR_TIMES.map(t => (
-                <button key={t.value} onClick={() => setSrTime(t.value)} style={{ flex:1, padding:"10px 6px", borderRadius:10, border: srTime===t.value?"2px solid #e07030":"1px solid #2a2a40", background: srTime===t.value?"rgba(224,112,48,.12)":"#111120", color: srTime===t.value?"#e09070":"#6b6b8a", cursor:"pointer", fontSize:13, fontWeight: srTime===t.value?700:400 }}>
-                  {t.label}
-                </button>
+              {SR_TIMES.map(t=>(
+                <button key={t.value} onClick={()=>setSrTime(t.value)} style={{ flex:1, padding:"10px 6px", borderRadius:10, border:srTime===t.value?"2px solid #e07030":"1px solid #2a2a40", background:srTime===t.value?"rgba(224,112,48,.12)":"#111120", color:srTime===t.value?"#e09070":"#6b6b8a", cursor:"pointer", fontSize:13, fontWeight:srTime===t.value?700:400 }}>{t.label}</button>
               ))}
             </div>
           </div>
-          <div style={{ marginBottom:18 }}>
+          <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:10, color:"#4a4a6a", fontWeight:700, letterSpacing:".1em", marginBottom:8 }}>GAME POOL</div>
             <div style={{ display:"flex", gap:8 }}>
-              {SR_POOLS.map(p => (
-                <button key={p.value} onClick={() => setSrPool(p.value)} style={{ flex:1, padding:"10px 6px", borderRadius:10, border: srPool===p.value?"2px solid #e07030":"1px solid #2a2a40", background: srPool===p.value?"rgba(224,112,48,.12)":"#111120", color: srPool===p.value?"#e09070":"#6b6b8a", cursor:"pointer", fontSize:11, fontWeight: srPool===p.value?700:400, textAlign:"center" }}>
+              {SR_POOLS.map(p=>(
+                <button key={p.value} onClick={()=>setSrPool(p.value)} style={{ flex:1, padding:"10px 6px", borderRadius:10, border:srPool===p.value?"2px solid #e07030":"1px solid #2a2a40", background:srPool===p.value?"rgba(224,112,48,.12)":"#111120", color:srPool===p.value?"#e09070":"#6b6b8a", cursor:"pointer", fontSize:11, fontWeight:srPool===p.value?700:400, textAlign:"center" }}>
                   <div>{p.label}</div><div style={{ fontSize:9, opacity:.6, marginTop:1 }}>{p.desc}</div>
                 </button>
               ))}
             </div>
           </div>
-          <LeaderboardTable mode={`sr_${srTime}`} accent="#e09070" />
         </>
       )}
 
-      {tab === "normal" && <LeaderboardTable mode={`inf_${diff}`} />}
+      <LBTable
+        rows={leaderboard} accent={tab==="speedrun"?"#e09070":"#9b87f8"}
+        valueFmt={tab==="speedrun" ? r=>`${r.games_correct} games` : r=>r.score.toLocaleString()+" pts"}
+      />
 
-      <button onClick={startGame} style={{ width:"100%", padding:"14px", borderRadius:12, background: tab==="speedrun"?"linear-gradient(135deg,#e07030,#f09050)":"linear-gradient(135deg,#7c6af6,#9b87f8)", color:"#fff", border:"none", cursor:"pointer", fontWeight:700, fontSize:15, marginTop:16 }}>
+      <button onClick={startGame} style={{ width:"100%", padding:"14px", borderRadius:12, background:tab==="speedrun"?"linear-gradient(135deg,#e07030,#f09050)":"linear-gradient(135deg,#7c6af6,#9b87f8)", color:"#fff", border:"none", cursor:"pointer", fontWeight:700, fontSize:15, marginTop:16 }}>
         {tab === "speedrun" ? `⚡ Start ${srTime}s Speedrun →` : "♾️ Start Infinite →"}
       </button>
     </div>
   );
 
-  // ── Speedrun done screen ───────────────────────────────────────────────────────
-  if (phase === "done" && tab === "speedrun") return (
-    <div style={{ maxWidth:520, margin:"0 auto", textAlign:"center" }}>
-      <div style={{ fontSize:52, marginBottom:8 }}>⏱️</div>
-      <h2 style={{ fontSize:26, fontWeight:800, color:"#f0f0fa", marginBottom:4 }}>Time's up!</h2>
-      <p style={{ color:"#6b6b8a", fontSize:14, marginBottom:20 }}>
-        You got <strong style={{ color:"#e09070" }}>{srCorrect}</strong> game{srCorrect!==1?"s":""} correct in {srTime}s
-      </p>
-      <div style={{ fontSize:36, fontWeight:800, color:"#e09070", marginBottom:24 }}>{(srCorrect * 100).toLocaleString()} pts</div>
-      <LeaderboardTable mode={`sr_${srTime}`} accent="#e09070" />
-      <div style={{ display:"flex", gap:8, marginTop:20 }}>
-        <button onClick={() => setPhase("setup")} style={{ flex:1, padding:"12px", borderRadius:10, border:"1px solid #2a2a40", background:"#0e0e1c", color:"#8b8baa", cursor:"pointer", fontWeight:600 }}>⚙️ Settings</button>
-        <button onClick={startGame} style={{ flex:1, padding:"12px", borderRadius:10, background:"linear-gradient(135deg,#e07030,#f09050)", color:"#fff", border:"none", cursor:"pointer", fontWeight:700 }}>Try Again ⚡</button>
+  // ── Speedrun done ─────────────────────────────────────────────────────────────
+  if (phase === "done" && tab === "speedrun") {
+    return (
+      <div style={{ maxWidth:520, margin:"0 auto", textAlign:"center" }}>
+        <div style={{ fontSize:52, marginBottom:8 }}>⏱️</div>
+        <h2 style={{ fontSize:26, fontWeight:800, color:"#f0f0fa", marginBottom:4 }}>Time's up!</h2>
+        <p style={{ color:"#6b6b8a", fontSize:14, marginBottom:16 }}>
+          You got <strong style={{ color:"#e09070" }}>{srCorrect}</strong> game{srCorrect!==1?"s":""} correct in {srTime}s
+        </p>
+        <div style={{ fontSize:36, fontWeight:800, color:"#e09070", marginBottom:20 }}>{(srCorrect*100).toLocaleString()} pts</div>
+        <LBTable
+          rows={leaderboard} accent="#e09070"
+          valueFmt={r=>`${r.games_correct} games`}
+        />
+        <div style={{ display:"flex", gap:8, marginTop:16 }}>
+          <button onClick={()=>setPhase("setup")} style={{ flex:1, padding:"12px", borderRadius:10, border:"1px solid #2a2a40", background:"#0e0e1c", color:"#8b8baa", cursor:"pointer", fontWeight:600 }}>⚙️ Settings</button>
+          <button onClick={startGame} style={{ flex:1, padding:"12px", borderRadius:10, background:"linear-gradient(135deg,#e07030,#f09050)", color:"#fff", border:"none", cursor:"pointer", fontWeight:700 }}>Try Again ⚡</button>
+        </div>
+        <button onClick={onBack} style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", background:"none", color:"#3a3a5a", cursor:"pointer", marginTop:8, fontSize:12 }}>← Back to menu</button>
       </div>
-      <button onClick={onBack} style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", background:"none", color:"#3a3a5a", cursor:"pointer", marginTop:8, fontSize:12 }}>← Back to menu</button>
-    </div>
-  );
+    );
+  }
 
-  // ── Loading / game not ready ───────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────────
   if (loading || !game) return (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:300, flexDirection:"column", gap:12 }}>
       <style>{SPIN_CSS}</style>
@@ -284,22 +273,20 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   // ── Playing ───────────────────────────────────────────────────────────────────
   return (
     <div style={{ maxWidth:520, margin:"0 auto" }}>
-
-      {/* HUD */}
-      <div style={{ display:"flex", gap:14, alignItems:"center", justifyContent:"space-between", marginBottom:16, background:"#0a0a18", borderRadius:12, padding:"10px 14px" }}>
-        <div style={{ display:"flex", gap:16 }}>
-          {[["SCORE", score.toLocaleString()],["STREAK",`${streak}🔥`],["BEST",`${best}⭐`],streak>=10?["MULT","3x⚡"]:streak>=5?["MULT","2x⚡"]:streak>=3?["MULT","1.5x⚡"]:null].filter(Boolean).map(([l,v]) => (
+      <div style={{ display:"flex", gap:14, alignItems:"center", justifyContent:"space-between", marginBottom:14, background:"#0a0a18", borderRadius:12, padding:"10px 14px" }}>
+        <div style={{ display:"flex", gap:14 }}>
+          {[["SCORE",score.toLocaleString()],["STREAK",`${streak}🔥`],["BEST",`${best}⭐`],
+            streak>=10?["MULT","3x⚡"]:streak>=5?["MULT","2x⚡"]:streak>=3?["MULT","1.5x⚡"]:null
+          ].filter(Boolean).map(([l,v])=>(
             <div key={l}>
               <div style={{ fontSize:9, color:"#3a3a5a", fontWeight:700, letterSpacing:".1em" }}>{l}</div>
-              <div style={{ fontSize:14, fontWeight:700, color:"#c0c0e0" }}>{v}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:"#c0c0e0" }}>{v}</div>
             </div>
           ))}
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
           {tab === "speedrun" && (
-            <div style={{ fontSize:20, fontWeight:800, color: timeLeft <= 10 ? "#e07070" : "#f0f0fa", minWidth:56, textAlign:"right" }}>
-              ⏱ {timeLeft}s
-            </div>
+            <div style={{ fontSize:20, fontWeight:800, color:timeLeft<=10?"#e07070":"#f0f0fa", minWidth:52 }}>⏱ {timeLeft}s</div>
           )}
           <span style={{ fontSize:10, padding:"2px 7px", borderRadius:20, background:"rgba(124,106,246,.12)", color:"#a99ef8", fontWeight:600 }}>{cfg.emoji} {cfg.label}</span>
           {usingMock && <span style={{ fontSize:10, padding:"2px 7px", borderRadius:20, background:"rgba(220,180,80,.1)", color:"#c0a040", fontWeight:600 }}>MOCK</span>}
@@ -307,22 +294,15 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
       </div>
 
       <GameBoard
-        game          = {game}
-        blurStart     = {cfg.blurStart}
-        blurStep      = {cfg.blurStep}
-        blurMin       = {cfg.blurMin}
-        grayscale     = {cfg.grayscale}
-        freeHints     = {cfg.freeHints}
-        autoAdvance   = {tab === "speedrun"}
-        onWin         = {handleWin}
-        onLose        = {handleLose}
-        onReadyForNext = {handleNext}
+        game={game} blurStart={cfg.blurStart} blurStep={cfg.blurStep} blurMin={cfg.blurMin}
+        grayscale={cfg.grayscale} freeHints={cfg.freeHints}
+        autoAdvance={tab==="speedrun"} onWin={handleWin} onLose={handleLose} onReadyForNext={handleNext}
       />
 
       {tab === "normal" && (
-        <div style={{ textAlign:"center", marginTop:18 }}>
-          <div style={{ fontSize:11, color:"#2a2a40", marginBottom:8 }}>
-            Game {(idx % Math.max(queue.length,1)) + 1} of {queue.length} · {CATEGORIES[category]?.label ?? "Random"} · {usingMock?"Mock data":"IGDB"}
+        <div style={{ textAlign:"center", marginTop:16 }}>
+          <div style={{ fontSize:11, color:"#2a2a40", marginBottom:6 }}>
+            Game {(idx % Math.max(queue.length,1))+1} of {queue.length} · {CATEGORIES[category]?.label??"Random"} · {usingMock?"Mock":"IGDB"}
           </div>
           <button onClick={handleEndSession} style={{ fontSize:12, color:"#4a4a6a", background:"none", border:"1px solid #1a1a28", borderRadius:8, padding:"5px 12px", cursor:"pointer" }}>
             🏁 End Session & Save Score

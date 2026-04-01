@@ -1,0 +1,159 @@
+/**
+ * src/supabase.js — Supabase client + all database helpers.
+ * Every DB call lives here. Nothing else in the app imports from @supabase directly.
+ */
+import { createClient } from "@supabase/supabase-js";
+
+const URL  = process.env.REACT_APP_SUPABASE_URL;
+const KEY  = process.env.REACT_APP_SUPABASE_ANON_KEY;
+const READY = !!(URL && KEY);
+
+export const supabase = READY ? createClient(URL, KEY) : null;
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+
+/** Check if a username is already taken. Returns true if available. */
+export async function isUsernameAvailable(username) {
+  if (!supabase) return true;
+  const { data } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("username", username)
+    .maybeSingle();
+  return !data;
+}
+
+/** Create a new profile row. Returns { ok, error }. */
+export async function createProfile(userId, username) {
+  if (!supabase) return { ok: false, error: "Supabase not configured" };
+  const { error } = await supabase
+    .from("profiles")
+    .insert({ id: userId, username });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/** Fetch a profile by userId. Returns null if not found. */
+export async function getProfile(userId) {
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+  return data;
+}
+
+// ── Scores ────────────────────────────────────────────────────────────────────
+
+/**
+ * Save a score entry.
+ * @param {object} entry — { userId, username, mode, score, difficulty?, category?, gamesCorrect?, timeLimit? }
+ */
+export async function saveScore(entry) {
+  if (!supabase) return { ok: false };
+  const { error } = await supabase.from("scores").insert({
+    user_id:       entry.userId,
+    username:      entry.username,
+    mode:          entry.mode,
+    score:         entry.score,
+    difficulty:    entry.difficulty  ?? null,
+    category:      entry.category   ?? null,
+    games_correct: entry.gamesCorrect ?? 0,
+    time_limit:    entry.timeLimit   ?? 0,
+  });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/**
+ * Get global leaderboard for a mode.
+ * For speedrun: pass { mode:"speedrun", timeLimit:60 }
+ * For infinite: pass { mode:"infinite", difficulty:"medium" }
+ * For gamedle:  pass { mode:"gamedle", date:"2026-04-02" }
+ */
+export async function getLeaderboard({ mode, difficulty, timeLimit, date, limit = 10 }) {
+  if (!supabase) return [];
+  let q = supabase
+    .from("scores")
+    .select("username, score, difficulty, games_correct, time_limit, play_date, created_at")
+    .eq("mode", mode)
+    .order("score", { ascending: false })
+    .limit(limit);
+
+  if (difficulty) q = q.eq("difficulty", difficulty);
+  if (timeLimit)  q = q.eq("time_limit", timeLimit);
+  if (date)       q = q.eq("play_date", date);
+
+  const { data } = await q;
+  return data ?? [];
+}
+
+/**
+ * Get a user's personal best for a mode.
+ */
+export async function getPersonalBest(userId, mode) {
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("scores")
+    .select("score, created_at")
+    .eq("user_id", userId)
+    .eq("mode", mode)
+    .order("score", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+// ── Gamedle Streaks ───────────────────────────────────────────────────────────
+
+/** Fetch streak for a user. Returns { streak, best_streak, last_won_date } or defaults. */
+export async function getStreak(userId) {
+  if (!supabase) return { streak: 0, best_streak: 0, last_won_date: null };
+  const { data } = await supabase
+    .from("gamedle_streaks")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data ?? { streak: 0, best_streak: 0, last_won_date: null };
+}
+
+/**
+ * Update streak after a daily game.
+ * @param {string} userId
+ * @param {string} username
+ * @param {boolean} won
+ */
+export async function updateStreak(userId, username, won) {
+  if (!supabase) return { streak: 0, best_streak: 0 };
+
+  const current = await getStreak(userId);
+  const today   = new Date().toISOString().slice(0, 10);
+  const yest    = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+  let newStreak = 0;
+  if (won) {
+    newStreak = current.last_won_date === yest ? current.streak + 1 : 1;
+  }
+
+  const updated = {
+    user_id:       userId,
+    username,
+    streak:        newStreak,
+    best_streak:   Math.max(current.best_streak ?? 0, newStreak),
+    last_won_date: won ? today : current.last_won_date,
+    updated_at:    new Date().toISOString(),
+  };
+
+  await supabase.from("gamedle_streaks").upsert(updated);
+  return updated;
+}
+
+/** Fetch global Gamedle streak leaderboard. */
+export async function getStreakLeaderboard(limit = 10) {
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("gamedle_streaks")
+    .select("username, streak, best_streak")
+    .order("best_streak", { ascending: false })
+    .limit(limit);
+  return data ?? [];
+}
