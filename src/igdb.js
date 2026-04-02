@@ -8,14 +8,15 @@ const PROXY_BASE = process.env.REACT_APP_PROXY_URL
   ? process.env.REACT_APP_PROXY_URL.replace("/api/igdb", "")
   : "http://localhost:3001";
 
-// ── Categories ────────────────────────────────────────────────────────────────
+// ── Categories ─────────────────────────────────────────────────────────────────
 // IGDB genre IDs: 4=Fighting,5=Shooter,8=Platform,9=Puzzle,10=Racing,
 //   12=RPG,14=Sports,15=Strategy,31=Adventure
 // IGDB theme IDs: 19=Horror,21=Survival,23=Stealth,32=Indie
 // IGDB game_modes: 1=Single Player,2=Multiplayer,3=Co-op
+// NOTE: Indie uses rating_count < 2000 to filter out big games incorrectly tagged
 export const CATEGORIES = {
   random:       { label: "🎲 Random",       extraWhere: "" },
-  indie:        { label: "🕹️ Indie",         extraWhere: "& themes = (32)" },
+  indie:        { label: "🕹️ Indie",         extraWhere: "& themes = (32) & rating_count < 2000 & genres != (14)" },
   multiplayer:  { label: "👥 Multiplayer",   extraWhere: "& game_modes = (2)" },
   singleplayer: { label: "🧍 Single Player", extraWhere: "& game_modes = (1)" },
   fighting:     { label: "🥊 Fighting",      extraWhere: "& genres = (4)" },
@@ -32,6 +33,10 @@ export const CATEGORIES = {
 };
 
 const FIELDS = `name,cover.url,first_release_date,genres.name,involved_companies.developer,involved_companies.company.name,summary,alternative_names.name,rating_count`;
+
+// Base filters applied to EVERY query — category=0 means main games only (no remasters/remakes/ports)
+// Name filters catch any that slip through with wrong category tag
+const BASE_WHERE = `cover != null & category = 0 & name !~ "*Remaster*" & name !~ "*Remastered*" & name !~ "*Definitive Edition*" & name !~ "*Definitive*" & name !~ "*HD Edition*" & name !~ "*Complete Edition*" & name !~ "*Anniversary Edition*" & name !~ "*Game of the Year*" & name !~ "*GOTY*"`;
 
 const toYear     = ts  => ts ? new Date(ts * 1000).getFullYear() : "Unknown";
 const toCoverUrl = url => url ? "https:" + url.replace("t_thumb", "t_cover_big") : null;
@@ -82,12 +87,13 @@ const toAliases = game => {
 
 export function transformGame(raw) {
   return {
-    id: raw.id, title: raw.name,
-    cover:   toCoverUrl(raw.cover?.url),
-    year:    toYear(raw.first_release_date),
-    genre:   raw.genres?.map(g => g.name).join(" / ") ?? "Unknown",
-    studio:  toStudio(raw.involved_companies),
-    hints:   toHints(raw),
+    id:     raw.id,
+    title:  raw.name,
+    cover:  toCoverUrl(raw.cover?.url),
+    year:   toYear(raw.first_release_date),
+    genre:  raw.genres?.map(g => g.name).join(" / ") ?? "Unknown",
+    studio: toStudio(raw.involved_companies),
+    hints:  toHints(raw),
     aliases: toAliases(raw),
   };
 }
@@ -110,7 +116,6 @@ async function igdbPost(endpoint, query) {
   return res.json();
 }
 
-// Different offset per session — different game pool per player
 function getSessionOffset() {
   let seed = sessionStorage.getItem("ggg_seed");
   if (!seed) { seed = String(Math.floor(Math.random() * 200)); sessionStorage.setItem("ggg_seed", seed); }
@@ -123,17 +128,16 @@ export async function fetchGames(limit = 50, difficulty = "medium", excludeIds =
   const offset     = (Math.floor(Math.random() * 100) + getSessionOffset()) % 300;
   const exclusion  = excludeIds.length ? ` & id != (${excludeIds.join(",")})` : "";
   const catFilter  = CATEGORIES[category]?.extraWhere ?? "";
-  const query = `fields ${FIELDS}; where cover != null & rating_count > ${minRatings}${exclusion}${catFilter}; sort rating_count desc; limit ${limit}; offset ${offset};`;
+  const query = `fields ${FIELDS}; where ${BASE_WHERE} & rating_count > ${minRatings}${exclusion}${catFilter}; sort rating_count desc; limit ${limit}; offset ${offset};`;
   const raw = await igdbPost("games", query);
   if (!Array.isArray(raw) || !raw.length) throw new Error("No games returned — try a different category or difficulty.");
   return raw.filter(g => g.cover?.url).map(transformGame);
 }
 
-// Same game for ALL users on the same calendar day
 export async function fetchDailyGame() {
   const today  = new Date().toISOString().slice(0, 10);
   const offset = parseInt(today.replace(/-/g, "").slice(-6), 10) % 250;
-  const query  = `fields ${FIELDS}; where cover != null & rating_count > 300; sort rating_count desc; limit 1; offset ${offset};`;
+  const query  = `fields ${FIELDS}; where ${BASE_WHERE} & rating_count > 300; sort rating_count desc; limit 1; offset ${offset};`;
   const raw = await igdbPost("games", query);
   if (!Array.isArray(raw) || !raw.length) throw new Error("Could not fetch daily game.");
   return transformGame(raw[0]);
@@ -148,7 +152,6 @@ export async function checkProxy() {
   } catch { return { ok: false, message: "Proxy offline — using mock data" }; }
 }
 
-// Ping every 30s to prevent Render free tier from sleeping
 let _timer = null;
 export function startKeepalive() {
   if (_timer) return;

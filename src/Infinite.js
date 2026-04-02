@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { fetchGames, checkProxy, CATEGORIES } from "./igdb";
-import { saveScore, getLeaderboard } from "./supabase";
+import { saveScore, getLeaderboard, getPersonalBest } from "./supabase";
 import { useUser } from "./UserContext";
 import GameBoard from "./GameBoard";
 
@@ -16,11 +16,16 @@ const MOCK_GAMES = [
   { id:6,title:"Portal 2",cover:"https://images.igdb.com/igdb/image/upload/t_cover_big/co1x7d.jpg",year:2011,genre:"Puzzle",studio:"Valve",hints:["This is a Puzzle game.","It was first released in 2011.","It was developed by Valve.","this game is a first-person puzzle-platform game."],aliases:["portal 2","portal2","portal"] },
 ];
 
+// More forgiving blur — reduced starting blur and min floor
 const DIFF_CFG = {
-  easy:   { label:"Easy",   emoji:"🟢", blurStart:12, blurStep:4, blurMin:0, grayscale:false, freeHints:0, scoreMult:0.75, minRatings:100 },
-  medium: { label:"Medium", emoji:"🟡", blurStart:22, blurStep:6, blurMin:5, grayscale:false, freeHints:0, scoreMult:1.0,  minRatings:20  },
-  hard:   { label:"Hard",   emoji:"🔴", blurStart:32, blurStep:9, blurMin:5, grayscale:true,  freeHints:1, scoreMult:1.5,  minRatings:5   },
+  easy:   { label:"Easy",   emoji:"🟢", blurStart:8,  blurStep:3, blurMin:0, grayscale:false, freeHints:0, scoreMult:0.75, minRatings:100 },
+  medium: { label:"Medium", emoji:"🟡", blurStart:14, blurStep:4, blurMin:0, grayscale:false, freeHints:0, scoreMult:1.0,  minRatings:20  },
+  hard:   { label:"Hard",   emoji:"🔴", blurStart:22, blurStep:6, blurMin:3, grayscale:true,  freeHints:1, scoreMult:1.5,  minRatings:5   },
 };
+
+// Speedrun: score = games * difficulty_multiplier * 100
+// Hard games → more points, so hard is always ranked higher for same game count
+const SR_DIFF_MULT = { easy: 1, medium: 1.5, hard: 2 };
 
 const SR_POOLS = [
   { label:"Top 10",  value:10,  minRatings:3000, desc:"Very famous" },
@@ -36,21 +41,42 @@ const SR_TIMES = [
   { label:"5 min", value:300 },
 ];
 
-function LBTable({ rows, accent = "#7c6af6", valueKey = "score", valueFmt }) {
-  if (!rows?.length) return <p style={{ color:"#3a3a5a", fontSize:12, textAlign:"center", padding:"10px 0" }}>No scores yet — be first!</p>;
-  const medals = ["🥇","🥈","🥉"];
+// ── Scrollable leaderboard ─────────────────────────────────────────────────────
+function LBTable({ rows, accent = "#7c6af6", valueFmt, myUsername, personalBest, pbLabel }) {
+  const medals  = ["🥇","🥈","🥉"];
+  const myIdx   = rows.findIndex(r => r.username === myUsername);
   return (
-    <div style={{ background:"#0a0a14", borderRadius:10, overflow:"hidden", marginTop:10 }}>
-      <div style={{ fontSize:10, color:"#3a3a5a", fontWeight:700, letterSpacing:".1em", padding:"8px 12px" }}>TOP SCORES</div>
-      {rows.map((r, i) => (
-        <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 12px", borderTop:"1px solid #111120", fontSize:12 }}>
-          <span style={{ color: i<3?["#f0c030","#c0c0c0","#cd7f32"][i]:"#3a3a5a", minWidth:24 }}>{medals[i]||`${i+1}.`}</span>
-          <span style={{ flex:1, color:"#c0c0e0", fontWeight:i===0?700:400 }}>{r.username}</span>
-          <span style={{ color:i===0?accent:"#5a5a7a", fontWeight:i===0?700:400 }}>
-            {valueFmt ? valueFmt(r) : r[valueKey].toLocaleString()}
-          </span>
+    <div style={{ border:"1px solid #1e1e2e", borderRadius:12, overflow:"hidden" }}>
+      <div style={{ maxHeight:220, overflowY:"auto" }}>
+        {!rows?.length
+          ? <p style={{ color:"#3a3a5a", fontSize:12, textAlign:"center", padding:"14px 0", margin:0 }}>No scores yet — be first!</p>
+          : rows.map((r, i) => (
+            <div key={i} style={{ display:"flex", gap:10, alignItems:"center", padding:"8px 12px",
+              borderBottom:i<rows.length-1?"1px solid #111120":"none",
+              background:r.username===myUsername?"rgba(124,106,246,.06)":"transparent", fontSize:12 }}>
+              <span style={{ color:i<3?["#f0c030","#c0c0c0","#cd7f32"][i]:"#3a3a5a", minWidth:22, flexShrink:0 }}>{medals[i]||`${i+1}.`}</span>
+              <span style={{ flex:1, color:r.username===myUsername?accent:"#c0c0e0", fontWeight:r.username===myUsername?700:400 }}>
+                {r.username}{r.username===myUsername?" (you)":""}
+              </span>
+              <span style={{ color:i===0?accent:"#6b6b8a", fontWeight:i===0?700:400, flexShrink:0 }}>
+                {valueFmt?valueFmt(r):r.score.toLocaleString()}
+              </span>
+            </div>
+          ))
+        }
+      </div>
+      {/* User not in top 10 */}
+      {myIdx === -1 && myUsername && personalBest && (
+        <div style={{ borderTop:"1px solid #1e1e2e", padding:"7px 12px", fontSize:12, display:"flex", justifyContent:"space-between", background:"rgba(124,106,246,.04)" }}>
+          <span style={{ color:"#4a4a6a" }}>Your best</span>
+          <span style={{ color:accent, fontWeight:600 }}>{pbLabel||personalBest.score.toLocaleString()}</span>
         </div>
-      ))}
+      )}
+      {myIdx === -1 && myUsername && !personalBest && (
+        <div style={{ borderTop:"1px solid #1e1e2e", padding:"6px 12px", fontSize:11, color:"#3a3a5a", textAlign:"center" }}>
+          You are not in the top 10 yet
+        </div>
+      )}
     </div>
   );
 }
@@ -74,19 +100,24 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   const [timeLeft,  setTimeLeft]  = useState(0);
   const [srCorrect, setSrCorrect] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [personalBest, setPersonalBest] = useState(null);
   const timerRef     = useRef(null);
   const srCorrectRef = useRef(0);
-  const cfg = DIFF_CFG[diff];
+  const cfg  = DIFF_CFG[diff];
   const game = queue[idx];
 
-  // Load leaderboard for current tab/diff/time
-  useEffect(() => {
-    if (phase !== "setup") return;
+  const loadLeaderboard = useCallback(async () => {
     const params = tab === "speedrun"
       ? { mode:"speedrun", timeLimit:srTime }
       : { mode:"infinite", difficulty:diff };
-    getLeaderboard({ ...params, limit:10 }).then(setLeaderboard);
-  }, [phase, tab, diff, srTime]);
+    const [lb, pb] = await Promise.all([
+      getLeaderboard({ ...params, limit:10 }),
+      getPersonalBest(userId, tab==="speedrun"?"speedrun":"infinite", tab==="speedrun"?{ timeLimit:srTime }:{ difficulty:diff }),
+    ]);
+    setLeaderboard(lb); setPersonalBest(pb);
+  }, [tab, diff, srTime, userId]);
+
+  useEffect(() => { if (phase === "setup") loadLeaderboard(); }, [phase, loadLeaderboard]);
 
   const loadGames = useCallback(async (d, cat, seen, minRat) => {
     setLoading(true);
@@ -96,7 +127,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
         const games = await fetchGames(50, d, [...seen], cat, minRat ?? null);
         const ns = new Set(seen); games.forEach(g => ns.add(g.id));
         setSeenIds(ns);
-        setQueue(prev => phase === "setup" ? shuffle(games) : [...prev.slice(0, idx+1), ...shuffle(games)]);
+        setQueue(prev => phase === "setup" ? shuffle(games) : [...prev.slice(0,idx+1), ...shuffle(games)]);
         setUsingMock(false); setLoading(false); return;
       } catch (_) {}
     }
@@ -119,9 +150,11 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
         if (t <= 1) {
           clearInterval(timerRef.current);
           const final = srCorrectRef.current;
+          const mult  = SR_DIFF_MULT[diff] ?? 1;
+          const finalScore = Math.round(final * mult * 100);
           setPhase("done");
-          // Save to Supabase
-          saveScore({ userId, username, mode:"speedrun", score:final*100, difficulty:diff, gamesCorrect:final, timeLimit:srTime });
+          saveScore({ userId, username, mode:"speedrun", score:finalScore, difficulty:diff, gamesCorrect:final, timeLimit:srTime });
+          loadLeaderboard();
           return 0;
         }
         return t - 1;
@@ -138,10 +171,10 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
         const ns = new Set(seenIds); games.forEach(x => ns.add(x.id));
         setSeenIds(ns);
         const cur = queue[idx];
-        setQueue(cur ? [cur, ...shuffle(games.filter(x => x.id !== cur.id))] : shuffle(games));
+        setQueue(cur ? [cur, ...shuffle(games.filter(x=>x.id!==cur.id))] : shuffle(games));
         setIdx(0);
-      }).catch(() => {});
-    }, 5 * 60 * 1000);
+      }).catch(()=>{});
+    }, 5*60*1000);
     return () => clearInterval(t);
   }, [phase, tab, usingMock, diff, category]); // eslint-disable-line
 
@@ -151,7 +184,8 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     return Math.round(base * cfg.scoreMult * sm);
   }
 
-  function handleWin(att) {
+  function handleWin(att, isCheat) {
+    if (isCheat) return; // don't record cheat games
     const pts = calcScore(att);
     setScore(s => s + pts);
     const ns = streak + 1; setStreak(ns); setBest(b => Math.max(b, ns));
@@ -163,6 +197,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   async function handleEndSession() {
     if (tab === "normal" && score > 0) {
       await saveScore({ userId, username, mode:"infinite", score, difficulty:diff, category, gamesCorrect:idx+1 });
+      await loadLeaderboard();
     }
     onBack();
   }
@@ -178,7 +213,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     <div style={{ maxWidth:520, margin:"0 auto" }}>
       <div style={{ display:"flex", gap:4, background:"#0e0e1c", borderRadius:12, padding:4, marginBottom:20 }}>
         {[["normal","♾️ Infinite"],["speedrun","⚡ Speedrun"]].map(([m,l])=>(
-          <button key={m} onClick={()=>setTab(m)} style={{ flex:1, padding:"10px", borderRadius:9, border:"none", background:tab===m?"linear-gradient(135deg,#7c6af6,#9b87f8)":"transparent", color:tab===m?"#fff":"#6b6b8a", cursor:"pointer", fontWeight:tab===m?700:400, fontSize:13, transition:"all .2s" }}>{l}</button>
+          <button key={m} onClick={()=>setTab(m)} style={{ flex:1, padding:"10px", borderRadius:9, border:"none", background:tab===m?"linear-gradient(135deg,#7c6af6,#9b87f8)":"transparent", color:tab===m?"#fff":"#6b6b8a", cursor:"pointer", fontWeight:tab===m?700:400, fontSize:13 }}>{l}</button>
         ))}
       </div>
 
@@ -224,12 +259,23 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
               ))}
             </div>
           </div>
+          <div style={{ marginBottom:10, padding:"8px 12px", borderRadius:8, background:"rgba(224,112,48,.06)", border:"1px solid rgba(224,112,48,.15)", fontSize:11, color:"#8a5030" }}>
+            ⚡ Hard difficulty = 2× points · Medium = 1.5× · Easy = 1×
+          </div>
         </>
       )}
 
       <LBTable
-        rows={leaderboard} accent={tab==="speedrun"?"#e09070":"#9b87f8"}
-        valueFmt={tab==="speedrun" ? r=>`${r.games_correct} games` : r=>r.score.toLocaleString()+" pts"}
+        rows={leaderboard} myUsername={username} personalBest={personalBest}
+        accent={tab==="speedrun"?"#e09070":"#9b87f8"}
+        valueFmt={tab==="speedrun"
+          ? r=>`${r.games_correct} games (${r.difficulty})`
+          : r=>r.score.toLocaleString()+" pts"}
+        pbLabel={personalBest
+          ? tab==="speedrun"
+            ? `${personalBest.games_correct} games (${personalBest.difficulty})`
+            : personalBest.score.toLocaleString()+" pts"
+          : null}
       />
 
       <button onClick={startGame} style={{ width:"100%", padding:"14px", borderRadius:12, background:tab==="speedrun"?"linear-gradient(135deg,#e07030,#f09050)":"linear-gradient(135deg,#7c6af6,#9b87f8)", color:"#fff", border:"none", cursor:"pointer", fontWeight:700, fontSize:15, marginTop:16 }}>
@@ -240,17 +286,21 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
 
   // ── Speedrun done ─────────────────────────────────────────────────────────────
   if (phase === "done" && tab === "speedrun") {
+    const finalScore = Math.round(srCorrect * (SR_DIFF_MULT[diff]??1) * 100);
     return (
       <div style={{ maxWidth:520, margin:"0 auto", textAlign:"center" }}>
         <div style={{ fontSize:52, marginBottom:8 }}>⏱️</div>
         <h2 style={{ fontSize:26, fontWeight:800, color:"#f0f0fa", marginBottom:4 }}>Time's up!</h2>
-        <p style={{ color:"#6b6b8a", fontSize:14, marginBottom:16 }}>
+        <p style={{ color:"#6b6b8a", fontSize:14, marginBottom:6 }}>
           You got <strong style={{ color:"#e09070" }}>{srCorrect}</strong> game{srCorrect!==1?"s":""} correct in {srTime}s
         </p>
-        <div style={{ fontSize:36, fontWeight:800, color:"#e09070", marginBottom:20 }}>{(srCorrect*100).toLocaleString()} pts</div>
-        <LBTable
-          rows={leaderboard} accent="#e09070"
-          valueFmt={r=>`${r.games_correct} games`}
+        <p style={{ color:"#5a5a7a", fontSize:12, marginBottom:16 }}>
+          {cfg.label} difficulty · {SR_DIFF_MULT[diff]}× multiplier
+        </p>
+        <div style={{ fontSize:36, fontWeight:800, color:"#e09070", marginBottom:20 }}>{finalScore.toLocaleString()} pts</div>
+        <LBTable rows={leaderboard} myUsername={username} personalBest={personalBest} accent="#e09070"
+          valueFmt={r=>`${r.games_correct} games (${r.difficulty})`}
+          pbLabel={personalBest?`${personalBest.games_correct} games (${personalBest.difficulty})`:null}
         />
         <div style={{ display:"flex", gap:8, marginTop:16 }}>
           <button onClick={()=>setPhase("setup")} style={{ flex:1, padding:"12px", borderRadius:10, border:"1px solid #2a2a40", background:"#0e0e1c", color:"#8b8baa", cursor:"pointer", fontWeight:600 }}>⚙️ Settings</button>
@@ -294,7 +344,8 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
       </div>
 
       <GameBoard
-        game={game} blurStart={cfg.blurStart} blurStep={cfg.blurStep} blurMin={cfg.blurMin}
+        game={game}
+        blurStart={cfg.blurStart} blurStep={cfg.blurStep} blurMin={cfg.blurMin}
         grayscale={cfg.grayscale} freeHints={cfg.freeHints}
         autoAdvance={tab==="speedrun"} onWin={handleWin} onLose={handleLose} onReadyForNext={handleNext}
       />
@@ -302,7 +353,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
       {tab === "normal" && (
         <div style={{ textAlign:"center", marginTop:16 }}>
           <div style={{ fontSize:11, color:"#2a2a40", marginBottom:6 }}>
-            Game {(idx % Math.max(queue.length,1))+1} of {queue.length} · {CATEGORIES[category]?.label??"Random"} · {usingMock?"Mock":"IGDB"}
+            Game {(idx%Math.max(queue.length,1))+1} of {queue.length} · {CATEGORIES[category]?.label??"Random"} · {usingMock?"Mock":"IGDB"}
           </div>
           <button onClick={handleEndSession} style={{ fontSize:12, color:"#4a4a6a", background:"none", border:"1px solid #1a1a28", borderRadius:8, padding:"5px 12px", cursor:"pointer" }}>
             🏁 End Session & Save Score
