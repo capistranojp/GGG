@@ -29,6 +29,11 @@ export const CATEGORIES = {
 
 const FIELDS = `name,cover.url,first_release_date,genres.name,involved_companies.developer,involved_companies.company.name,summary,alternative_names.name,rating_count`;
 
+// category = 0 = Main Game only. This already excludes:
+//   8=Remake, 9=Remaster, 11=Port, 10=Expanded, 12=Fork, etc.
+// NOTE: IGDB does NOT support !~ with wildcards — category=0 is the correct approach.
+const BASE_WHERE = "cover != null & category = 0";
+
 const toYear     = ts  => ts ? new Date(ts * 1000).getFullYear() : "Unknown";
 const toCoverUrl = url => url ? "https:" + url.replace("t_thumb", "t_cover_big") : null;
 const toStudio   = (cos = []) => {

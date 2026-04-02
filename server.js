@@ -14,7 +14,7 @@ const PORT = process.env.PROXY_PORT || 3001;
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:3001",
-  "https://capistranojp.github.io",
+  "https://capistranojp.github.io/",
   // Add more origins here if you ever move the site
 ];
 
