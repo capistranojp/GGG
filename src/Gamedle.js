@@ -82,6 +82,24 @@ export default function Gamedle({ onBack }) {
   const [lbTab,      setLbTab]      = useState("daily");
   const [usingMock,  setUsingMock]  = useState(false);
   const alreadyPlayed = hasPlayedToday(userId);
+  const [countdown, setCountdown] = useState("");
+
+  // Tick every second — computes hh:mm:ss until next midnight UTC
+  useEffect(() => {
+    function calcCountdown() {
+      const now    = new Date();
+      const midnight = new Date();
+      midnight.setUTCHours(24, 0, 0, 0);
+      const diff = midnight - now;
+      const h  = String(Math.floor(diff / 3_600_000)).padStart(2, "0");
+      const m  = String(Math.floor((diff % 3_600_000) / 60_000)).padStart(2, "0");
+      const s  = String(Math.floor((diff % 60_000) / 1_000)).padStart(2, "0");
+      setCountdown(`${h}:${m}:${s}`);
+    }
+    calcCountdown();
+    const t = setInterval(calcCountdown, 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -228,7 +246,10 @@ export default function Gamedle({ onBack }) {
           {result === "won"
             ? <><div style={{ fontSize:10, color:"#4a7040", letterSpacing:".1em" }}>TODAY'S SCORE</div>
                 <div style={{ fontSize:28, fontWeight:700, color:"#6fe0a0" }}>{score.toLocaleString()}</div></>
-            : <div style={{ fontSize:14, color:"#e07070", fontWeight:600 }}>Come back tomorrow!</div>}
+            : <div style={{ fontSize:14, color:"#e07070", fontWeight:600, lineHeight:1.7 }}>
+                Come back tomorrow!<br/>
+                <span style={{ fontSize:12, color:"#9a5050", fontWeight:400 }}>Next game in <span style={{ fontFamily:"monospace", fontWeight:700 }}>{countdown}</span></span>
+              </div>}
           {modBonus.length > 0 && result==="won" && <div style={{ fontSize:11, color:"#4a7040", marginTop:2 }}>{modBonus.join(" · ")} applied</div>}
         </div>
       )}
@@ -243,7 +264,15 @@ export default function Gamedle({ onBack }) {
 
       {/* Game board or lock */}
       {alreadyPlayed && !result
-        ? <div style={{ textAlign:"center", padding:"28px 0", color:"#3a3a5a", fontSize:14 }}>🔒 Come back tomorrow for a new game!</div>
+        ? (
+          <div style={{ textAlign:"center", padding:"24px 20px", background:"rgba(240,192,48,.04)", border:"1px solid rgba(240,192,48,.12)", borderRadius:16, marginBottom:20 }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>🔒</div>
+            <div style={{ fontSize:14, color:"#8a7030", marginBottom:12 }}>You've already played today!</div>
+            <div style={{ fontSize:11, color:"#5a5020", letterSpacing:".1em", fontWeight:700, marginBottom:6 }}>NEXT GAME IN</div>
+            <div style={{ fontSize:38, fontWeight:900, color:"#f0c030", letterSpacing:"0.08em", fontVariantNumeric:"tabular-nums", fontFamily:"monospace" }}>{countdown}</div>
+            <div style={{ fontSize:11, color:"#4a4020", marginTop:8 }}>New game resets at midnight UTC</div>
+          </div>
+        )
         : game && (
           <GameBoard
             game={game}
