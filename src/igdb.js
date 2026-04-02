@@ -139,13 +139,32 @@ export async function fetchDailyGame() {
   return transformGame(raw[0]);
 }
 
+// Cache the proxy result so the cold-start retry only happens once per session,
+// not on every game-batch load in Infinite mode.
+let _proxyStatus = null;
+
 export async function checkProxy() {
-  try {
-    const res  = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(4000) });
-    const data = await res.json();
-    if (!data.hasCredentials) return { ok: false, message: "Proxy running — credentials missing" };
-    return { ok: true, message: "Connected to IGDB" };
-  } catch { return { ok: false, message: "Proxy offline — using mock data" }; }
+  if (_proxyStatus) return _proxyStatus;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res  = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(15_000) });
+      const data = await res.json();
+      if (!data.hasCredentials) {
+        _proxyStatus = { ok: false, message: "Proxy running — credentials missing" };
+        return _proxyStatus;
+      }
+      _proxyStatus = { ok: true, message: "Connected to IGDB" };
+      return _proxyStatus;
+    } catch {
+      if (attempt === 2) {
+        _proxyStatus = { ok: false, message: "Proxy offline — using mock data" };
+        return _proxyStatus;
+      }
+      // Short pause between retries so Render has time to wake up
+      await new Promise(r => setTimeout(r, 3_000));
+    }
+  }
 }
 
 let _timer = null;
