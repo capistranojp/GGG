@@ -1,5 +1,6 @@
 /**
  * src/supabase.js — Supabase client + all DB helpers.
+ * password_hash is only ever fetched during login — never stored client-side after verification.
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -17,23 +18,31 @@ export async function isUsernameAvailable(username) {
   return !data;
 }
 
-export async function createProfile(userId, username) {
+/** Create profile with a bcrypt hash. Never store plaintext password. */
+export async function createProfile(userId, username, passwordHash) {
   if (!supabase) return { ok: false, error: "Supabase not configured" };
-  const { error } = await supabase.from("profiles").insert({ id: userId, username });
+  const { error } = await supabase.from("profiles").insert({ id: userId, username, password_hash: passwordHash });
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 export async function getProfile(userId) {
   if (!supabase) return null;
-  const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+  const { data } = await supabase.from("profiles").select("id, username, created_at").eq("id", userId).maybeSingle();
   return data;
 }
 
-/** Login: look up profile by username, return { id, username } or null */
+/**
+ * Fetch profile by username INCLUDING the hash so we can verify the password.
+ * The hash is used once for bcrypt.compare() then discarded — never stored.
+ */
 export async function getProfileByUsername(username) {
   if (!supabase) return null;
-  const { data } = await supabase.from("profiles").select("id, username").eq("username", username).maybeSingle();
-  return data;
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, username, password_hash")
+    .eq("username", username)
+    .maybeSingle();
+  return data; // { id, username, password_hash } or null
 }
 
 // ── Scores ────────────────────────────────────────────────────────────────────
@@ -45,10 +54,10 @@ export async function saveScore(entry) {
     username:      entry.username,
     mode:          entry.mode,
     score:         entry.score,
-    difficulty:    entry.difficulty  ?? null,
-    category:      entry.category   ?? null,
+    difficulty:    entry.difficulty   ?? null,
+    category:      entry.category    ?? null,
     games_correct: entry.gamesCorrect ?? 0,
-    time_limit:    entry.timeLimit   ?? 0,
+    time_limit:    entry.timeLimit    ?? 0,
   });
   return error ? { ok: false, error: error.message } : { ok: true };
 }

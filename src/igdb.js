@@ -9,11 +9,6 @@ const PROXY_BASE = process.env.REACT_APP_PROXY_URL
   : "http://localhost:3001";
 
 // ── Categories ─────────────────────────────────────────────────────────────────
-// IGDB genre IDs: 4=Fighting,5=Shooter,8=Platform,9=Puzzle,10=Racing,
-//   12=RPG,14=Sports,15=Strategy,31=Adventure
-// IGDB theme IDs: 19=Horror,21=Survival,23=Stealth,32=Indie
-// IGDB game_modes: 1=Single Player,2=Multiplayer,3=Co-op
-// NOTE: Indie uses rating_count < 2000 to filter out big games incorrectly tagged
 export const CATEGORIES = {
   random:       { label: "🎲 Random",       extraWhere: "" },
   indie:        { label: "🕹️ Indie",         extraWhere: "& themes = (32) & rating_count < 2000 & genres != (14)" },
@@ -34,9 +29,20 @@ export const CATEGORIES = {
 
 const FIELDS = `name,cover.url,first_release_date,genres.name,involved_companies.developer,involved_companies.company.name,summary,alternative_names.name,rating_count`;
 
-// Base filters applied to EVERY query — category=0 means main games only (no remasters/remakes/ports)
-// Name filters catch any that slip through with wrong category tag
-const BASE_WHERE = `cover != null & category = 0 & name !~ "*Remaster*" & name !~ "*Remastered*" & name !~ "*Definitive Edition*" & name !~ "*Definitive*" & name !~ "*HD Edition*" & name !~ "*Complete Edition*" & name !~ "*Anniversary Edition*" & name !~ "*Game of the Year*" & name !~ "*GOTY*"`;
+// IGDB Apicalypse wildcard syntax: wildcards go OUTSIDE quotes → *"keyword"*
+// category = 0 → main games only (excludes remasters=8, remakes=9, ports=11, etc.)
+const BASE_WHERE = [
+  "cover != null",
+  "category = 0",
+  'name !~ *"Remaster"*',
+  'name !~ *"Remastered"*',
+  'name !~ *"Definitive Edition"*',
+  'name !~ *"HD Edition"*',
+  'name !~ *"Complete Edition"*',
+  'name !~ *"Anniversary Edition"*',
+  'name !~ *"Game of the Year"*',
+  'name !~ *"GOTY"*',
+].join(" & ");
 
 const toYear     = ts  => ts ? new Date(ts * 1000).getFullYear() : "Unknown";
 const toCoverUrl = url => url ? "https:" + url.replace("t_thumb", "t_cover_big") : null;
@@ -100,9 +106,9 @@ export function transformGame(raw) {
 
 async function igdbPost(endpoint, query) {
   const res = await fetch(`${PROXY}/${endpoint}`, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body:    JSON.stringify({ query }),
   });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
@@ -130,7 +136,7 @@ export async function fetchGames(limit = 50, difficulty = "medium", excludeIds =
   const catFilter  = CATEGORIES[category]?.extraWhere ?? "";
   const query = `fields ${FIELDS}; where ${BASE_WHERE} & rating_count > ${minRatings}${exclusion}${catFilter}; sort rating_count desc; limit ${limit}; offset ${offset};`;
   const raw = await igdbPost("games", query);
-  if (!Array.isArray(raw) || !raw.length) throw new Error("No games returned — try a different category or difficulty.");
+  if (!Array.isArray(raw) || !raw.length) throw new Error("No games returned — try a different category.");
   return raw.filter(g => g.cover?.url).map(transformGame);
 }
 
@@ -145,7 +151,7 @@ export async function fetchDailyGame() {
 
 export async function checkProxy() {
   try {
-    const res  = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(3000) });
+    const res  = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(4000) });
     const data = await res.json();
     if (!data.hasCredentials) return { ok: false, message: "Proxy running — credentials missing" };
     return { ok: true, message: "Connected to IGDB" };
