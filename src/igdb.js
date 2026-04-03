@@ -130,6 +130,16 @@ async function igdbPost(endpoint, query) {
   }
 
   const data = await res.json();
+
+  // IGDB sometimes returns auth/permission errors as a plain object with HTTP 200,
+  // e.g. { "message": "Unauthorized", "status": 401 }
+  // Without this check the caller sees an empty array and gets a confusing error.
+  if (!Array.isArray(data)) {
+    const msg = data?.message ?? data?.error ?? JSON.stringify(data);
+    const status = data?.status ? ` (${data.status})` : "";
+    throw new Error(`IGDB error${status}: ${msg}`);
+  }
+
   return data;
 }
 
