@@ -122,9 +122,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   const loadGames = useCallback(async (d, cat, seen, minRat) => {
     setLoading(true);
     try {
-      // fetchGames uses a shared time-slot cache (same batch for all users).
-      // excludeIds (seen) is filtered client-side against the cached batch.
-      const games = await fetchGames(35, d, [...seen], cat, minRat ?? null);
+      const games = await fetchGames(30, d, [...seen], cat, minRat ?? null);
       const ns = new Set(seen);
       games.forEach(g => ns.add(g.id));
       setSeenIds(ns);
@@ -168,9 +166,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     return () => clearInterval(timerRef.current);
   }, [phase, tab]); // eslint-disable-line
 
-  // Every 3 minutes the time-slot advances and a new batch of games becomes available.
-  // Pre-warm the cache in the background so there's no loading delay when the
-  // current batch is exhausted.  We never force-replace the active queue mid-game.
+  // Background refresh every 5 min
   useEffect(() => {
     if (phase !== "playing" || tab !== "normal" || usingMock) return;
     let lastSlot = Math.floor(Date.now() / (3 * 60 * 1000));
@@ -178,9 +174,11 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
       const slot = Math.floor(Date.now() / (3 * 60 * 1000));
       if (slot === lastSlot) return;
       lastSlot = slot;
-      // New slot: silently pre-fetch next batch into the igdb cache
+      // New time-slot started — silently pre-warm the cache for the new batch.
+      // The queue is NOT replaced mid-game; new games appear when the user
+      // exhausts the current batch and handleNext calls loadGames.
       fetchGames(30, diff, [], category).catch(() => {});
-    }, 30_000); // check every 30 s
+    }, 30_000); // poll every 30 s
     return () => clearInterval(t);
   }, [phase, tab, usingMock, diff, category]); // eslint-disable-line
 
