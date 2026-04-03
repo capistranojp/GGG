@@ -275,7 +275,7 @@ export function startKeepalive() {
   if (_keepaliveTimer) return;
   _keepaliveTimer = setInterval(() => {
     fetch(`${PROXY_BASE}/api/health`).catch(() => {});
-  }, 30_000);
+  }, 14_999);
 }
 
 export function stopKeepalive() {
