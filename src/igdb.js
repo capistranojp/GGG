@@ -139,32 +139,29 @@ export async function fetchDailyGame() {
   return transformGame(raw[0]);
 }
 
-// Cache the proxy result so the cold-start retry only happens once per session,
-// not on every game-batch load in Infinite mode.
-let _proxyStatus = null;
+// ── Proxy status — NOT cached at module level ─────────────────────────────────
+// We intentionally re-check on every game load so a warmed-up server is detected.
+// Only the successful result is cached for the current game session via a ref
+// passed in from the caller when performance matters.
 
 export async function checkProxy() {
-  if (_proxyStatus) return _proxyStatus;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const res  = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(15_000) });
-      const data = await res.json();
-      if (!data.hasCredentials) {
-        _proxyStatus = { ok: false, message: "Proxy running — credentials missing" };
-        return _proxyStatus;
-      }
-      _proxyStatus = { ok: true, message: "Connected to IGDB" };
-      return _proxyStatus;
-    } catch {
-      if (attempt === 2) {
-        _proxyStatus = { ok: false, message: "Proxy offline — using mock data" };
-        return _proxyStatus;
-      }
-      // Short pause between retries so Render has time to wake up
-      await new Promise(r => setTimeout(r, 3_000));
-    }
+  // Single attempt — fast timeout so we don't block the UI
+  try {
+    const res  = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(8_000) });
+    const data = await res.json();
+    if (!data.hasCredentials)
+      return { ok: false, message: "Proxy running — credentials missing" };
+    return { ok: true, message: "Connected to IGDB" };
+  } catch {
+    return { ok: false, message: "Proxy offline — using mock data" };
   }
+}
+
+// ── Warmup — call this on app start so Render free tier wakes up ──────────────
+// Fires immediately and silently, so by the time the user navigates to a game
+// the server is already warm and checkProxy() will succeed.
+export function warmupProxy() {
+  fetch(`${PROXY_BASE}/api/health`).catch(() => {});
 }
 
 let _timer = null;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { startKeepalive, stopKeepalive } from "./igdb";
+import { startKeepalive, stopKeepalive, warmupProxy } from "./igdb";
 import { UserProvider, useUser } from "./UserContext";
 import AuthModal from "./AuthModal";
 import Gamedle  from "./Gamedle";
@@ -50,7 +50,11 @@ function ModeCard({ icon, title, badge, badgeColor, desc, tags, accent, onClick 
 function Inner() {
   const { isLoggedIn, username, signOut } = useUser();
   const [screen, setScreen] = useState("home");
-  useEffect(() => { startKeepalive(); return () => stopKeepalive(); }, []);
+  useEffect(() => {
+    warmupProxy();          // Immediately wake Render free tier on app load
+    startKeepalive();       // Then keep it warm every 30s
+    return () => stopKeepalive();
+  }, []);
   if (!isLoggedIn) return <AuthModal />;
   if (screen === "gamedle")  return <ScreenWrap onBack={()=>setScreen("home")} label="🏆 GAMEDLE"   accent="#f0c030"><Gamedle  onBack={()=>setScreen("home")}/></ScreenWrap>;
   if (screen === "infinite") return <ScreenWrap onBack={()=>setScreen("home")} label="♾️ INFINITE"  accent="#9b87f8"><Infinite onBack={()=>setScreen("home")} defaultTab="normal"/></ScreenWrap>;
