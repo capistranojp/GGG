@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { startKeepalive, stopKeepalive, warmupProxy } from "./igdb";
+import { startKeepalive, stopKeepalive } from "./igdb";
 import { UserProvider, useUser } from "./UserContext";
 import AuthModal from "./AuthModal";
 import Gamedle  from "./Gamedle";
@@ -51,8 +51,7 @@ function Inner() {
   const { isLoggedIn, username, signOut } = useUser();
   const [screen, setScreen] = useState("home");
   useEffect(() => {
-    warmupProxy();      // ping immediately so Render wakes before user hits a game
-    startKeepalive();   // keep it warm every 30s
+    startKeepalive();
     return () => stopKeepalive();
   }, []);
   if (!isLoggedIn) return <AuthModal />;
