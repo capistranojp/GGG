@@ -131,36 +131,52 @@ async function igdbPost(endpoint, query) {
 
   const data = await res.json();
 
-  // IGDB sometimes returns auth/permission errors as a plain object with HTTP 200,
+  // IGDB sometimes returns auth/rate errors as a plain object with HTTP 200
   // e.g. { "message": "Unauthorized", "status": 401 }
-  // Without this check the caller sees an empty array and gets a confusing error.
   if (!Array.isArray(data)) {
-    const msg = data?.message ?? data?.error ?? JSON.stringify(data);
-    const status = data?.status ? ` (${data.status})` : "";
+    const msg    = data?.message ?? data?.error ?? JSON.stringify(data);
+    const status = data?.status  ? ` (${data.status})` : "";
     throw new Error(`IGDB error${status}: ${msg}`);
   }
 
   return data;
 }
 
-// ── Session offset — different game pool per browser session ──────────────────
-function getSessionOffset() {
-  let seed = sessionStorage.getItem("ggg_seed");
-  if (!seed) {
-    seed = String(Math.floor(Math.random() * 200));
-    sessionStorage.setItem("ggg_seed", seed);
-  }
-  return parseInt(seed, 10);
+// ── Time-slot system ──────────────────────────────────────────────────────────
+// Every 3 minutes the slot advances. All users share the same slot, so they all
+// see the same batch of games — no more per-session random offsets hitting empty
+// ranges in filtered categories.
+//
+const SLOT_MS = 3 * 60 * 1000; // 3 minutes
+
+export function getTimeslotSeed() {
+  return Math.floor(Date.now() / SLOT_MS);
 }
+
+// Maps a seed to a stable offset 0–99. Different slots → well-distributed pages.
+function seedToOffset(seed) {
+  return (seed * 31) % 100;
+}
+
+// Module-level game cache: `${category}_${minRatings}_${seed}` → Game[]
+// Lives for the lifetime of the page — effectively one entry per 3-min slot
+// per category/difficulty combination.
+const _cache = new Map();
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Fetch a batch of games from IGDB.
+ * Fetch a batch of 30 games for the current time-slot.
+ *
+ * All users in the same 3-minute window share the same query (same offset),
+ * so they get the same pool of games.  excludeIds is applied CLIENT-SIDE
+ * against the cached batch so repeat games are avoided within a session.
+ * If the user exhausts the current slot, the next slot's batch is fetched.
+ *
  * THROWS on failure — callers should catch and fall back to mock if needed.
  */
 export async function fetchGames(
-  limit = 50,
+  limit = 30,
   difficulty = "medium",
   excludeIds = [],
   category = "random",
@@ -168,28 +184,48 @@ export async function fetchGames(
 ) {
   const thresholds = { easy: 100, medium: 20, hard: 5 };
   const minRatings = minRatingsOverride ?? thresholds[difficulty] ?? 20;
-  const offset     = (Math.floor(Math.random() * 100) + getSessionOffset()) % 300;
-  const exclusion  = excludeIds.length ? ` & id != (${excludeIds.join(",")})` : "";
   const catFilter  = CATEGORIES[category]?.extraWhere ?? "";
+  const baseSeed   = getTimeslotSeed();
 
-  const query = [
-    `fields ${FIELDS}`,
-    `where ${BASE_WHERE} & rating_count > ${minRatings}${exclusion}${catFilter}`,
-    `sort rating_count desc`,
-    `limit ${limit}`,
-    `offset ${offset}`,
-  ].join("; ") + ";";
+  // Try current slot, then spill into subsequent slots if all games are seen.
+  for (let i = 0; i < 3; i++) {
+    const seed     = baseSeed + i;
+    const cacheKey = `${category}_${minRatings}_${seed}`;
 
-  const raw = await igdbPost("games", query);
+    if (!_cache.has(cacheKey)) {
+      const offset = seedToOffset(seed);
+      const query  = [
+        `fields ${FIELDS}`,
+        `where ${BASE_WHERE} & rating_count > ${minRatings}${catFilter}`,
+        `sort rating_count desc`,
+        `limit ${limit}`,
+        `offset ${offset}`,
+      ].join("; ") + ";";
 
-  if (!Array.isArray(raw) || raw.length === 0)
-    throw new Error("IGDB returned 0 games for this query");
+      const raw = await igdbPost("games", query);
 
-  const games = raw.filter(g => g.cover?.url).map(transformGame);
-  if (games.length === 0)
-    throw new Error("All returned games had no cover");
+      if (raw.length === 0)
+        throw new Error("IGDB returned 0 games for this query");
 
-  return games;
+      const games = raw.filter(g => g.cover?.url).map(transformGame);
+      if (games.length === 0)
+        throw new Error("All returned games had no cover");
+
+      _cache.set(cacheKey, games);
+    }
+
+    const allGames = _cache.get(cacheKey);
+    const unseen   = excludeIds.length
+      ? allGames.filter(g => !excludeIds.includes(g.id))
+      : allGames;
+
+    if (unseen.length > 0) return unseen;
+    // All games in this slot already seen — advance to the next slot
+  }
+
+  // Absolute fallback: return the current slot regardless of seen status
+  const fallbackKey = `${category}_${minRatings}_${baseSeed}`;
+  return _cache.get(fallbackKey) ?? [];
 }
 
 /**

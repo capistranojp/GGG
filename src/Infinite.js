@@ -122,7 +122,9 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   const loadGames = useCallback(async (d, cat, seen, minRat) => {
     setLoading(true);
     try {
-      const games = await fetchGames(50, d, [...seen], cat, minRat ?? null);
+      // fetchGames uses a shared time-slot cache (same batch for all users).
+      // excludeIds (seen) is filtered client-side against the cached batch.
+      const games = await fetchGames(35, d, [...seen], cat, minRat ?? null);
       const ns = new Set(seen);
       games.forEach(g => ns.add(g.id));
       setSeenIds(ns);
@@ -166,18 +168,19 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
     return () => clearInterval(timerRef.current);
   }, [phase, tab]); // eslint-disable-line
 
-  // Background refresh every 5 min
+  // Every 3 minutes the time-slot advances and a new batch of games becomes available.
+  // Pre-warm the cache in the background so there's no loading delay when the
+  // current batch is exhausted.  We never force-replace the active queue mid-game.
   useEffect(() => {
     if (phase !== "playing" || tab !== "normal" || usingMock) return;
+    let lastSlot = Math.floor(Date.now() / (3 * 60 * 1000));
     const t = setInterval(() => {
-      fetchGames(50, diff, [...seenIds], category).then(games => {
-        const ns = new Set(seenIds); games.forEach(x => ns.add(x.id));
-        setSeenIds(ns);
-        const cur = queue[idx];
-        setQueue(cur ? [cur, ...shuffle(games.filter(x=>x.id!==cur.id))] : shuffle(games));
-        setIdx(0);
-      }).catch(()=>{});
-    }, 5*60*1000);
+      const slot = Math.floor(Date.now() / (3 * 60 * 1000));
+      if (slot === lastSlot) return;
+      lastSlot = slot;
+      // New slot: silently pre-fetch next batch into the igdb cache
+      fetchGames(30, diff, [], category).catch(() => {});
+    }, 30_000); // check every 30 s
     return () => clearInterval(t);
   }, [phase, tab, usingMock, diff, category]); // eslint-disable-line
 
