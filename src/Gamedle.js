@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { fetchDailyGame, checkProxy } from "./igdb";
+import { fetchDailyGame } from "./igdb";
 import { saveScore, getLeaderboard, getStreak, updateStreak, getStreakLeaderboard, getPersonalBest } from "./supabase";
 import { useUser } from "./UserContext";
 import GameBoard from "./GameBoard";
@@ -109,11 +109,16 @@ export default function Gamedle({ onBack }) {
     if (prog.mods)     setMods(prog.mods);
     if (prog.modsLocked) setModsLocked(true);
 
-    const proxy = await checkProxy();
+    // Fetch daily game — try IGDB directly, fall back to mock on any failure
     try {
-      if (proxy.ok) setGame(await fetchDailyGame());
-      else { setGame(DAILY_MOCK); setUsingMock(true); }
-    } catch { setGame(DAILY_MOCK); setUsingMock(true); }
+      const g = await fetchDailyGame();
+      setGame(g);
+      setUsingMock(false);
+    } catch (err) {
+      console.warn("[Gamedle] IGDB fetch failed, using mock:", err.message);
+      setGame(DAILY_MOCK);
+      setUsingMock(true);
+    }
 
     const [sk, dlb, slb, pb] = await Promise.all([
       getStreak(userId),

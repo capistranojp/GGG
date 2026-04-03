@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { fetchGames, checkProxy, CATEGORIES } from "./igdb";
+import { fetchGames, CATEGORIES } from "./igdb";
 import { saveScore, getLeaderboard, getPersonalBest } from "./supabase";
 import { useUser } from "./UserContext";
 import GameBoard from "./GameBoard";
@@ -121,17 +121,20 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
 
   const loadGames = useCallback(async (d, cat, seen, minRat) => {
     setLoading(true);
-    const proxy = await checkProxy();
-    if (proxy.ok) {
-      try {
-        const games = await fetchGames(50, d, [...seen], cat, minRat ?? null);
-        const ns = new Set(seen); games.forEach(g => ns.add(g.id));
-        setSeenIds(ns);
-        setQueue(prev => phase === "setup" ? shuffle(games) : [...prev.slice(0,idx+1), ...shuffle(games)]);
-        setUsingMock(false); setLoading(false); return;
-      } catch (_) {}
+    try {
+      const games = await fetchGames(50, d, [...seen], cat, minRat ?? null);
+      const ns = new Set(seen);
+      games.forEach(g => ns.add(g.id));
+      setSeenIds(ns);
+      setQueue(prev => phase === "setup" ? shuffle(games) : [...prev.slice(0, idx + 1), ...shuffle(games)]);
+      setUsingMock(false);
+      setLoading(false);
+    } catch (err) {
+      console.warn("[Infinite] IGDB fetch failed, using mock:", err.message);
+      setUsingMock(true);
+      setQueue(shuffle(MOCK_GAMES));
+      setLoading(false);
     }
-    setUsingMock(true); setQueue(shuffle(MOCK_GAMES)); setLoading(false);
   }, [phase, idx]);
 
   function startGame() {

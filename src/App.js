@@ -51,8 +51,8 @@ function Inner() {
   const { isLoggedIn, username, signOut } = useUser();
   const [screen, setScreen] = useState("home");
   useEffect(() => {
-    warmupProxy();          // Immediately wake Render free tier on app load
-    startKeepalive();       // Then keep it warm every 30s
+    warmupProxy();      // ping immediately so Render wakes before user hits a game
+    startKeepalive();   // keep it warm every 30s
     return () => stopKeepalive();
   }, []);
   if (!isLoggedIn) return <AuthModal />;
