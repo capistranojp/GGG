@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { startKeepalive, stopKeepalive, warmupProxy } from "./igdb";
+import { startKeepalive, stopKeepalive } from "./igdb";
 import { UserProvider, useUser } from "./UserContext";
 import AuthModal from "./AuthModal";
 import Gamedle  from "./Gamedle";
@@ -47,55 +47,13 @@ function ModeCard({ icon, title, badge, badgeColor, desc, tags, accent, onClick 
   );
 }
 
-function VolumeControl() {
-  const [muted,  setMutedState]  = useState(() => getMuted());
-  const [volume, setVolumeState] = useState(() => getVolume());
-  const [open,   setOpen]        = useState(false);
-
-  function toggleMute() {
-    const nm = !muted;
-    setMuted(nm); setMutedState(nm);
-  }
-  function handleVolume(e) {
-    const v = parseFloat(e.target.value);
-    setVolume(v); setVolumeState(v);
-    if (muted && v > 0) { setMuted(false); setMutedState(false); }
-  }
-
-  const icon = muted || volume === 0 ? "🔇" : volume < 0.4 ? "🔉" : "🔊";
-
-  return (
-    <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 50, display: "flex", alignItems: "center", gap: 8, background: "rgba(14,14,28,.92)", backdropFilter: "blur(10px)", border: "1px solid #2a2a40", borderRadius: 40, padding: open ? "8px 14px" : "8px 12px", transition: "all .25s", boxShadow: "0 4px 20px rgba(0,0,0,.4)" }}>
-      <button onClick={toggleMute} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
-        style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 0 }}
-        title={muted ? "Unmute" : "Mute"}>
-        {icon}
-      </button>
-      <div onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
-        style={{ width: open ? 80 : 0, overflow: "hidden", transition: "width .25s", display: "flex", alignItems: "center" }}>
-        <input type="range" min={0} max={1} step={0.02} value={muted ? 0 : volume}
-          onChange={handleVolume}
-          style={{ width: 80, accentColor: "#7c6af6", cursor: "pointer" }}/>
-      </div>
-    </div>
-  );
-}
-
 function Inner() {
   const { isLoggedIn, username, signOut } = useUser();
   const [screen, setScreen] = useState("home");
-
   useEffect(() => {
-    warmupProxy();      // ping immediately so Render wakes before user hits a game
-    startKeepalive();   // keep it warm every 30s
+    startKeepalive();
     return () => stopKeepalive();
   }, []);
-
-  // Start BG when user is logged in (they've already clicked something → autoplay allowed)
-  useEffect(() => {
-    if (isLoggedIn && screen === "home") startBG();
-  }, [isLoggedIn, screen]);
-
   if (!isLoggedIn) return <AuthModal />;
   if (screen === "gamedle")  return <ScreenWrap onBack={()=>setScreen("home")} label="🏆 GAMEDLE"   accent="#f0c030"><Gamedle  onBack={()=>setScreen("home")}/></ScreenWrap>;
   if (screen === "infinite") return <ScreenWrap onBack={()=>setScreen("home")} label="♾️ INFINITE"  accent="#9b87f8"><Infinite onBack={()=>setScreen("home")} defaultTab="normal"/></ScreenWrap>;
