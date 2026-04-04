@@ -4,8 +4,6 @@
  * 4DM1N  = cover revealed, score STILL recorded, says "Hello Isho"
  */
 import { useState, useEffect, useRef } from "react";
-import { playWrong, playRight } from "./sounds";
-import Confetti from "./Confetti";
 
 const norm = s => s.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
 
@@ -48,7 +46,6 @@ export default function GameBoard({
   const [cheating,  setCheating]  = useState(false); // R3V34L — no record
   const [adminPeek, setAdminPeek] = useState(false); // 4DM1N  — still records
   const [toast,     setToast]     = useState(null);
-  const [confetti,  setConfetti]  = useState(false);
   const inputRef  = useRef(null);
   const canvasRef = useRef(null);
   const histRef   = useRef([]);
@@ -62,7 +59,7 @@ export default function GameBoard({
     setAttempts(initialAttempts);
     setGuess(""); setStatus("playing");
     setShake(false); setNextReady(false);
-    setCheating(false); setAdminPeek(false); setToast(null); setConfetti(false);
+    setCheating(false); setAdminPeek(false); setToast(null);
     histRef.current = []; cursorRef.current = -1;
   }, [game?.id]); // eslint-disable-line
 
@@ -137,15 +134,11 @@ export default function GameBoard({
     if (aliases.includes(g)) {
       setStatus("won");
       showToast("🎉 Correct!", "success");
-      playRight();
-      setConfetti(true);
-      setTimeout(() => setConfetti(false), 3200);
       endRound(true, attempts, cheating); // cheating=true means no record
     } else {
       const na = attempts + 1;
       setAttempts(na); setGuess("");
       setShake(true); setTimeout(() => setShake(false), 450);
-      playWrong();
       onAttemptsChange?.(na);
       if (na >= maxAtt) {
         setStatus("lost");
@@ -179,7 +172,6 @@ export default function GameBoard({
   return (
     <div style={{ fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <style>{CSS}</style>
-      <Confetti active={confetti} />
 
       {toast && (
         <div key={toast.key} className="gb-fade" style={{ padding:"10px 16px", borderRadius:10, marginBottom:14, fontSize:13, fontWeight:500, textAlign:"center",

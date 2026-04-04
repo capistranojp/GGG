@@ -6,7 +6,6 @@
  */
 import { createContext, useContext, useState, useEffect } from "react";
 import bcrypt from "bcryptjs";
-import { containsBadWord } from "./badwords";
 import { createProfile, getProfile, isUsernameAvailable, getProfileByUsername } from "./supabase";
 
 const UID_KEY  = "ggg_user_id";
@@ -48,7 +47,6 @@ export function UserProvider({ children }) {
     if (trimmed.length > 20)                   return { ok: false, error: "Username must be 20 characters or less." };
     if (!/^[a-zA-Z0-9_]+$/.test(trimmed))     return { ok: false, error: "Letters, numbers and underscores only." };
     if (!password || password.length < 6)      return { ok: false, error: "Password must be at least 6 characters." };
-    if (containsBadWord(trimmed))              return { ok: false, error: "That username is not allowed. Please choose a different one." };
 
     setLoading(true);
     const available = await isUsernameAvailable(trimmed);
