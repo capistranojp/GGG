@@ -144,12 +144,7 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   function startGame() {
     const seen = new Set();
     setScore(0); setStreak(0); setBest(0); setIdx(0); setSeenIds(seen); setPhase("playing");
-    if (tab === "speedrun") {
-      setSrCorrect(0); srCorrectRef.current = 0; setTimeLeft(srTime);
-      startSpeedrunBG(); // ramp up tempo
-    } else {
-      startBG(); // ensure normal tempo
-    }
+    if (tab === "speedrun") { setSrCorrect(0); srCorrectRef.current = 0; setTimeLeft(srTime); }
     const poolCfg = SR_POOLS.find(p => p.value === srPool);
     loadGames(diff, category, seen, tab === "speedrun" ? poolCfg?.minRatings : null);
   }
@@ -161,7 +156,6 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
       setTimeLeft(t => {
         if (t <= 1) {
           clearInterval(timerRef.current);
-          stopSpeedrunBG(); // reset tempo to normal
           const final = srCorrectRef.current;
           const mult  = SR_DIFF_MULT[diff] ?? 1;
           const finalScore = Math.round(final * mult * 100);
@@ -336,21 +330,8 @@ export default function Infinite({ onBack, defaultTab = "normal" }) {
   );
 
   // ── Playing ───────────────────────────────────────────────────────────────────
-  const isLowTime = tab === "speedrun" && phase === "playing" && timeLeft <= 10 && timeLeft > 0;
   return (
-    <div style={{ maxWidth:520, margin:"0 auto", position:"relative" }}>
-      <style>{`
-        @keyframes redFlash {
-          0%,100% { opacity:0; }
-          50%      { opacity:1; }
-        }
-      `}</style>
-      {/* Red flash overlay — only during speedrun countdown ≤ 10 s */}
-      {isLowTime && (
-        <div style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:40,
-          background:"rgba(220,50,50,.18)",
-          animation:`redFlash ${timeLeft <= 5 ? ".4s" : ".8s"} ease-in-out infinite` }}/>
-      )}
+    <div style={{ maxWidth:520, margin:"0 auto" }}>
       <div style={{ display:"flex", gap:14, alignItems:"center", justifyContent:"space-between", marginBottom:14, background:"#0a0a18", borderRadius:12, padding:"10px 14px" }}>
         <div style={{ display:"flex", gap:14 }}>
           {[["SCORE",score.toLocaleString()],["STREAK",`${streak}🔥`],["BEST",`${best}⭐`],

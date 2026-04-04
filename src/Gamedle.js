@@ -85,9 +85,6 @@ export default function Gamedle({ onBack }) {
   const alreadyPlayed = hasPlayedToday(userId);
   const [countdown, setCountdown] = useState("");
 
-  // Start BG music (continues from menu — startBG is safe to call again, it's a no-op if already playing)
-  useEffect(() => { startBG(); }, []);
-
   // Tick every second — computes hh:mm:ss until next midnight UTC
   useEffect(() => {
     function calcCountdown() {

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { startKeepalive, stopKeepalive } from "./igdb";
-import { startBG, stopBG, setVolume, setMuted, getMuted, getVolume } from "./sounds";
+import { startKeepalive, stopKeepalive, warmupProxy } from "./igdb";
 import { UserProvider, useUser } from "./UserContext";
 import AuthModal from "./AuthModal";
 import Gamedle  from "./Gamedle";
@@ -87,8 +86,9 @@ function Inner() {
   const [screen, setScreen] = useState("home");
 
   useEffect(() => {
-    startKeepalive();
-    return () => { stopKeepalive(); stopBG(); };
+    warmupProxy();      // ping immediately so Render wakes before user hits a game
+    startKeepalive();   // keep it warm every 30s
+    return () => stopKeepalive();
   }, []);
 
   // Start BG when user is logged in (they've already clicked something → autoplay allowed)
