@@ -102,7 +102,7 @@ function Inner() {
   if (screen === "gamedle")  return <ScreenWrap onBack={()=>setScreen("home")} label="🏆 GAMEDLE"    accent="#f0c030"><Gamedle  onBack={()=>setScreen("home")}/></ScreenWrap>;
   if (screen === "infinite") return <ScreenWrap onBack={()=>setScreen("home")} label="♾️ INFINITE"   accent="#9b87f8"><Infinite onBack={()=>setScreen("home")} defaultTab="normal"/></ScreenWrap>;
   if (screen === "speedrun") return <ScreenWrap onBack={()=>setScreen("home")} label="⚡ SPEEDRUN"   accent="#e09070"><Infinite onBack={()=>setScreen("home")} defaultTab="speedrun"/></ScreenWrap>;
-  if (screen === "library")    return <ScreenWrap onBack={()=>setScreen("home")} label="📚 GAME INDEX"  accent="#4ec9b0"><Library    onBack={()=>setScreen("home")}/></ScreenWrap>;
+  if (screen === "Library")    return <ScreenWrap onBack={()=>setScreen("home")} label="📚 GAME INDEX"  accent="#4ec9b0"><Library    onBack={()=>setScreen("home")}/></ScreenWrap>;
 
   return (
     <div style={{ minHeight:"100vh", background:"#080810", fontFamily:"'Segoe UI',system-ui,sans-serif", padding:"0 20px 40px" }}>
@@ -139,7 +139,7 @@ function Inner() {
           <ModeCard icon="📚" title="GAME INDEX" accent="#4ec9b0"
             desc="Browse the game library — ratings, synopsis, platforms, and where to buy or play. Search any title instantly."
             tags={["🔍 Search","⭐ Ratings","📖 Synopsis","🛒 Buy Links","🎮 Platforms"]}
-            onClick={()=>setScreen("library")}/>
+            onClick={()=>setScreen("Library")}/>
         </div>
       </div>
       <p style={{ textAlign:"center", fontSize:11, color:"#1a1a2a", marginTop:28 }}>Powered by IGDB · {new Date().toLocaleDateString()}</p>
