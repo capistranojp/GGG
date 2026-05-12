@@ -80,7 +80,6 @@ export default function AuthModal() {
           {/* Confirm password (register only) */}
           {tab === "register" && (
             <div>
-              <label style={{ fontSize:11, color:"#4a4a6a", fontWeight:700, letterSpacing:".08em", display:"block", marginBottom:5 }}>CONFIRM PASSWORD</label>
               <div style={{ position:"relative" }}>
                 <input value={confirm} onChange={e=>{setConfirm(e.target.value);setError("");}}
                   type={showPw?"text":"password"} placeholder="Repeat Password"
