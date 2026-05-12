@@ -46,7 +46,7 @@ export default function AuthModal() {
 
         {/* Tabs */}
         <div style={{ display:"flex", gap:4, background:"#080810", borderRadius:10, padding:3, marginBottom:20 }}>
-          {[["register","New Player"],["login","Sign In"]].map(([t,l])=>(
+          {[["register","Register"],["login","Sign In"]].map(([t,l])=>(
             <button key={t} onClick={()=>switchTab(t)} style={{
               flex:1, padding:"9px", borderRadius:8, border:"none",
               background: tab===t?"linear-gradient(135deg,#7c6af6,#9b87f8)":"transparent",
