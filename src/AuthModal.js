@@ -59,20 +59,18 @@ export default function AuthModal() {
         <form onSubmit={handleSubmit} style={{ display:"flex", flexDirection:"column", gap:10, textAlign:"left" }}>
           {/* Username */}
           <div>
-            <label style={{ fontSize:11, color:"#4a4a6a", fontWeight:700, letterSpacing:".08em", display:"block", marginBottom:5 }}>USERNAME</label>
             <input value={name} onChange={e=>{setName(e.target.value);setError("");}}
-              placeholder={tab==="register"?"e.g. capistranojp":"Your username"}
+              placeholder={tab==="register"?"Username":"Username"}
               maxLength={20} autoFocus autoComplete="username"
               style={inputStyle(!!error && error.toLowerCase().includes("username"))}/>
           </div>
 
           {/* Password */}
           <div>
-            <label style={{ fontSize:11, color:"#4a4a6a", fontWeight:700, letterSpacing:".08em", display:"block", marginBottom:5 }}>PASSWORD</label>
             <div style={{ position:"relative" }}>
               <input value={password} onChange={e=>{setPassword(e.target.value);setError("");}}
                 type={showPw?"text":"password"}
-                placeholder={tab==="register"?"Min 6 characters":"Your password"}
+                placeholder={tab==="register"?"Password":"Password"}
                 autoComplete={tab==="register"?"new-password":"current-password"}
                 style={{ ...inputStyle(!!error && error.toLowerCase().includes("password")), paddingRight:40 }}/>
               <button type="button" style={eyeBtn} onClick={()=>setShowPw(v=>!v)}>{showPw?"🙈":"👁️"}</button>
@@ -85,7 +83,7 @@ export default function AuthModal() {
               <label style={{ fontSize:11, color:"#4a4a6a", fontWeight:700, letterSpacing:".08em", display:"block", marginBottom:5 }}>CONFIRM PASSWORD</label>
               <div style={{ position:"relative" }}>
                 <input value={confirm} onChange={e=>{setConfirm(e.target.value);setError("");}}
-                  type={showPw?"text":"password"} placeholder="Repeat password"
+                  type={showPw?"text":"password"} placeholder="Repeat Password"
                   autoComplete="new-password"
                   style={{ ...inputStyle(!!error && error.toLowerCase().includes("match")), paddingRight:40 }}/>
               </div>
