@@ -1,6 +1,6 @@
 Hello!
 
-I'm John Patrick Capistrano this is only a test.
+I'm Isho! this is only a test.
 
 I'm currently testing using API's and Website DEPLOYMENT.
 
