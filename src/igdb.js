@@ -207,6 +207,102 @@ export async function fetchDailyGame() {
   return transformGame(raw[0]);
 }
 
+// ── Index / Library ───────────────────────────────────────────────────────────
+
+// IGDB website category numbers → store display info
+const STORE_MAP = {
+  1:  { name: "Official Site", icon: "🌐" },
+  13: { name: "Steam",         icon: "🖥️"  },
+  15: { name: "itch.io",       icon: "🕹️"  },
+  16: { name: "Epic Games",    icon: "⚡"  },
+  17: { name: "GOG",           icon: "🛒"  },
+  10: { name: "App Store",     icon: "📱"  },
+  12: { name: "Google Play",   icon: "📱"  },
+};
+
+const INDEX_FIELDS = [
+  "name",
+  "cover.url",
+  "first_release_date",
+  "genres.name",
+  "themes.name",
+  "platforms.name",
+  "involved_companies.developer",
+  "involved_companies.publisher",
+  "involved_companies.company.name",
+  "summary",
+  "rating",
+  "rating_count",
+  "aggregated_rating",
+  "aggregated_rating_count",
+  "websites.url",
+  "websites.category",
+  "screenshots.url",
+  "alternative_names.name",
+].join(",");
+
+function transformGameFull(raw) {
+  const base   = transformGame(raw);
+  const stores = (raw.websites ?? [])
+    .filter(w => STORE_MAP[w.category])
+    .map(w => ({ ...STORE_MAP[w.category], url: w.url }))
+    .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i); // de-dupe
+
+  const devCo = (raw.involved_companies ?? []).find(c => c.developer);
+  const pubCo = (raw.involved_companies ?? []).find(c => c.publisher);
+
+  return {
+    ...base,
+    summary:      raw.summary ?? null,
+    rating:       raw.rating            ? Math.round(raw.rating)            : null,
+    ratingCount:  raw.rating_count      ?? 0,
+    criticRating: raw.aggregated_rating ? Math.round(raw.aggregated_rating) : null,
+    criticCount:  raw.aggregated_rating_count ?? 0,
+    platforms:    (raw.platforms ?? []).map(p => p.name),
+    themes:       (raw.themes    ?? []).map(t => t.name),
+    developer:    devCo?.company?.name ?? null,
+    publisher:    pubCo?.company?.name ?? null,
+    screenshots:  (raw.screenshots ?? [])
+                    .map(s => "https:" + s.url.replace("t_thumb", "t_screenshot_big"))
+                    .slice(0, 4),
+    stores,
+  };
+}
+
+/**
+ * Fetch a page of popular games for the Index library.
+ * offset 0 = first 30, 30 = next 30, max 90.
+ */
+export async function fetchIndexGames(offset = 0) {
+  const query = [
+    `fields ${INDEX_FIELDS}`,
+    `where cover != null & rating_count > 100`,
+    `sort rating_count desc`,
+    `limit 30`,
+    `offset ${Math.min(offset, 90)}`,
+  ].join("; ") + ";";
+
+  const raw = await igdbPost("games", query);
+  return raw.filter(g => g.cover?.url).map(transformGameFull);
+}
+
+/**
+ * Search games by name using IGDB's full-text search.
+ * Returns up to 15 results.
+ */
+export async function searchGames(query) {
+  if (!query.trim()) return [];
+  const q = [
+    `search "${query.trim().replace(/"/g, "")}"`,
+    `fields ${INDEX_FIELDS}`,
+    `where cover != null`,
+    `limit 15`,
+  ].join("; ") + ";";
+
+  const raw = await igdbPost("games", q);
+  return raw.filter(g => g.cover?.url).map(transformGameFull);
+}
+
 // ── Keepalive — prevents Render free-tier from sleeping ──────────────────────
 let _keepaliveTimer = null;
 

@@ -4,6 +4,7 @@ import { UserProvider, useUser } from "./UserContext";
 import AuthModal from "./AuthModal";
 import Gamedle  from "./Gamedle";
 import Infinite from "./Infinite";
+import Index    from "./Index";
 
 const CSS = `
   @keyframes spin    { to { transform:rotate(360deg); } }
@@ -58,6 +59,7 @@ function Inner() {
   if (screen === "gamedle")  return <ScreenWrap onBack={()=>setScreen("home")} label="🏆 GAMEDLE"   accent="#f0c030"><Gamedle  onBack={()=>setScreen("home")}/></ScreenWrap>;
   if (screen === "infinite") return <ScreenWrap onBack={()=>setScreen("home")} label="♾️ INFINITE"  accent="#9b87f8"><Infinite onBack={()=>setScreen("home")} defaultTab="normal"/></ScreenWrap>;
   if (screen === "speedrun") return <ScreenWrap onBack={()=>setScreen("home")} label="⚡ SPEEDRUN"  accent="#e09070"><Infinite onBack={()=>setScreen("home")} defaultTab="speedrun"/></ScreenWrap>;
+  if (screen === "index")    return <ScreenWrap onBack={()=>setScreen("home")} label="📚 GAME INDEX" accent="#4ec9b0"><Index    onBack={()=>setScreen("home")}/></ScreenWrap>;
 
   return (
     <div style={{ minHeight:"100vh", background:"#080810", fontFamily:"'Segoe UI',system-ui,sans-serif", padding:"0 20px 40px" }}>
@@ -88,6 +90,12 @@ function Inner() {
             desc="Race the clock — how many games can you guess in 30s, 1 min, or 5 min? Choose your pool from Top 10 to Top 250."
             tags={["30s","1 min","2 min","5 min","Top 10","Top 50","Top 100","Top 250"]}
             onClick={()=>setScreen("speedrun")}/>
+        </div>
+        <div style={{ animation:"fadeUp .5s ease .2s both" }}>
+          <ModeCard icon="📚" title="GAME INDEX" accent="#4ec9b0"
+            desc="Browse the game library — ratings, synopsis, platforms, and where to buy or play. Search any title instantly."
+            tags={["🔍 Search","⭐ Ratings","📖 Synopsis","🛒 Buy Links","🎮 Platforms"]}
+            onClick={()=>setScreen("index")}/>
         </div>
       </div>
       <p style={{ textAlign:"center", fontSize:11, color:"#1a1a2a", marginTop:28 }}>Powered by IGDB · {new Date().toLocaleDateString()}</p>
