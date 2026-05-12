@@ -6,6 +6,7 @@
  */
 import { createContext, useContext, useState, useEffect } from "react";
 import bcrypt from "bcryptjs";
+import { containsBadWord } from "./badwords";
 import { createProfile, getProfile, isUsernameAvailable, getProfileByUsername } from "./supabase";
 
 const UID_KEY  = "ggg_user_id";
@@ -25,7 +26,6 @@ export function UserProvider({ children }) {
   const [username, setUsername] = useState(() => localStorage.getItem(NAME_KEY));
   const [loading,  setLoading]  = useState(false);
 
-  // Restore username from Supabase if localStorage was cleared
   useEffect(() => {
     if (userId && !username) {
       getProfile(userId).then(p => {
@@ -43,43 +43,41 @@ export function UserProvider({ children }) {
 
   async function register(name, password) {
     const trimmed = name.trim();
-    if (!trimmed || trimmed.length < 2)        return { ok: false, error: "Username must be at least 2 characters." };
-    if (trimmed.length > 20)                   return { ok: false, error: "Username must be 20 characters or less." };
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed))     return { ok: false, error: "Letters, numbers and underscores only." };
-    if (!password || password.length < 6)      return { ok: false, error: "Password must be at least 6 characters." };
+    if (!trimmed || trimmed.length < 2)    return { ok:false, error:"Username must be at least 2 characters." };
+    if (trimmed.length > 20)               return { ok:false, error:"Username must be 20 characters or less." };
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) return { ok:false, error:"Letters, numbers and underscores only." };
+    if (!password || password.length < 6) return { ok:false, error:"Password must be at least 6 characters." };
+    if (containsBadWord(trimmed))         return { ok:false, error:"That username is not allowed. Please choose a different one." };
 
     setLoading(true);
     const available = await isUsernameAvailable(trimmed);
-    if (!available) { setLoading(false); return { ok: false, error: "Username already taken." }; }
+    if (!available) { setLoading(false); return { ok:false, error:"Username already taken." }; }
 
-    // Hash password with bcrypt (cost 10 — secure but fast enough in-browser)
     const hash   = await bcrypt.hash(password, 10);
     const id     = makeUUID();
     const result = await createProfile(id, trimmed, hash);
-    if (!result.ok) { setLoading(false); return { ok: false, error: result.error }; }
+    if (!result.ok) { setLoading(false); return { ok:false, error:result.error }; }
 
     setSession(id, trimmed);
     setLoading(false);
-    return { ok: true };
+    return { ok:true };
   }
 
   async function login(name, password) {
     const trimmed = name.trim();
-    if (!trimmed)   return { ok: false, error: "Enter your username." };
-    if (!password)  return { ok: false, error: "Enter your password." };
+    if (!trimmed)  return { ok:false, error:"Enter your username." };
+    if (!password) return { ok:false, error:"Enter your password." };
 
     setLoading(true);
     const profile = await getProfileByUsername(trimmed);
-    if (!profile) { setLoading(false); return { ok: false, error: "Username not found. Did you mean to register?" }; }
+    if (!profile) { setLoading(false); return { ok:false, error:"Username not found. Did you mean to register?" }; }
 
-    // Verify password against stored hash
     const match = await bcrypt.compare(password, profile.password_hash);
-    if (!match) { setLoading(false); return { ok: false, error: "Incorrect password." }; }
+    if (!match) { setLoading(false); return { ok:false, error:"Incorrect password." }; }
 
-    // Don't store the hash — only the safe session identifiers
     setSession(profile.id, profile.username);
     setLoading(false);
-    return { ok: true };
+    return { ok:true };
   }
 
   function signOut() {
@@ -90,7 +88,7 @@ export function UserProvider({ children }) {
   }
 
   return (
-    <UserCtx.Provider value={{ userId, username, loading, register, login, signOut, isLoggedIn: !!(userId && username) }}>
+    <UserCtx.Provider value={{ userId, username, loading, register, login, signOut, isLoggedIn:!!(userId && username) }}>
       {children}
     </UserCtx.Provider>
   );

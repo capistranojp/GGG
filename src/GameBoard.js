@@ -4,6 +4,8 @@
  * 4DM1N  = cover revealed, score STILL recorded, says "Hello Isho"
  */
 import { useState, useEffect, useRef } from "react";
+import { playWrong, playRight } from "./sounds";
+import Confetti from "./Confetti";
 
 const norm = s => s.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
 
@@ -22,7 +24,7 @@ const CSS = `
 
 export default function GameBoard({
   game,
-  blurStart       = 14,   // more forgiving default
+  blurStart       = 14,
   blurStep        = 4,
   blurMin         = 0,
   grayscale       = false,
@@ -30,12 +32,12 @@ export default function GameBoard({
   freeHints       = 0,
   maxAttempts,
   maxHints,
-  initialAttempts = 0,    // restore Gamedle progress
+  initialAttempts = 0,
   autoAdvance     = false,
-  onWin,                  // (attemptsUsed, isCheatMode) => void
+  onWin,
   onLose,
   onReadyForNext,
-  onAttemptsChange,       // (n) => void — called after each wrong guess for progress saving
+  onAttemptsChange,
   nextLabel       = "Next game →",
 }) {
   const [attempts,  setAttempts]  = useState(initialAttempts);
@@ -43,9 +45,10 @@ export default function GameBoard({
   const [status,    setStatus]    = useState("playing");
   const [shake,     setShake]     = useState(false);
   const [nextReady, setNextReady] = useState(false);
-  const [cheating,  setCheating]  = useState(false); // R3V34L — no record
-  const [adminPeek, setAdminPeek] = useState(false); // 4DM1N  — still records
+  const [cheating,  setCheating]  = useState(false);
+  const [adminPeek, setAdminPeek] = useState(false);
   const [toast,     setToast]     = useState(null);
+  const [confetti,  setConfetti]  = useState(false);
   const inputRef  = useRef(null);
   const canvasRef = useRef(null);
   const histRef   = useRef([]);
@@ -54,12 +57,11 @@ export default function GameBoard({
   const visibleHints = maxHints ? (game?.hints || []).slice(0, maxHints) : (game?.hints || []);
   const maxAtt = maxAttempts ?? visibleHints.length + 1;
 
-  // Reset on new game (but respect initialAttempts)
   useEffect(() => {
     setAttempts(initialAttempts);
     setGuess(""); setStatus("playing");
     setShake(false); setNextReady(false);
-    setCheating(false); setAdminPeek(false); setToast(null);
+    setCheating(false); setAdminPeek(false); setToast(null); setConfetti(false);
     histRef.current = []; cursorRef.current = -1;
   }, [game?.id]); // eslint-disable-line
 
@@ -112,14 +114,11 @@ export default function GameBoard({
     if (!game || status !== "playing" || !guess.trim()) return;
     const upper = guess.trim().toUpperCase();
 
-    // R3V34L — cheat mode, cover revealed, score NOT recorded
     if (upper === "R3V34L") {
       setCheating(true); setGuess("");
       showToast("🔓 Cover revealed! Your Score will not be recorded.", "warn");
       return;
     }
-
-    // 4DM1N — admin peek, cover revealed, score STILL recorded
     if (upper === "4DM1N") {
       setAdminPeek(true); setGuess("");
       showToast("🔓 Cover revealed! Hello Isho", "warn");
@@ -134,11 +133,15 @@ export default function GameBoard({
     if (aliases.includes(g)) {
       setStatus("won");
       showToast("🎉 Correct!", "success");
-      endRound(true, attempts, cheating); // cheating=true means no record
+      playRight();
+      setConfetti(true);
+      setTimeout(() => setConfetti(false), 3200);
+      endRound(true, attempts, cheating);
     } else {
       const na = attempts + 1;
       setAttempts(na); setGuess("");
       setShake(true); setTimeout(() => setShake(false), 450);
+      playWrong();
       onAttemptsChange?.(na);
       if (na >= maxAtt) {
         setStatus("lost");
@@ -170,8 +173,9 @@ export default function GameBoard({
   if (!game) return null;
 
   return (
-    <div style={{ fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+    <div style={{ fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
       <style>{CSS}</style>
+      <Confetti active={confetti} />
 
       {toast && (
         <div key={toast.key} className="gb-fade" style={{ padding:"10px 16px", borderRadius:10, marginBottom:14, fontSize:13, fontWeight:500, textAlign:"center",

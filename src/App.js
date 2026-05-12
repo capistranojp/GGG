@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { startKeepalive, stopKeepalive } from "./igdb";
+import { startBG, stopBG, setVolume, setMuted, getMuted, getVolume } from "./sounds";
 import { UserProvider, useUser } from "./UserContext";
 import AuthModal from "./AuthModal";
-import Gamedle  from "./Gamedle";
-import Infinite from "./Infinite";
-import Index    from "./Index";
+import Gamedle   from "./Gamedle";
+import Infinite  from "./Infinite";
+import Index     from "./Index";
 
 const CSS = `
   @keyframes spin    { to { transform:rotate(360deg); } }
@@ -48,22 +49,65 @@ function ModeCard({ icon, title, badge, badgeColor, desc, tags, accent, onClick 
   );
 }
 
+// ── Floating volume control ───────────────────────────────────────────────────
+function VolumeControl() {
+  const [muted,  setMutedState]  = useState(() => getMuted());
+  const [volume, setVolumeState] = useState(() => getVolume());
+  const [open,   setOpen]        = useState(false);
+
+  function toggleMute() {
+    const nm = !muted;
+    setMuted(nm); setMutedState(nm);
+  }
+  function handleVolume(e) {
+    const v = parseFloat(e.target.value);
+    setVolume(v); setVolumeState(v);
+    if (muted && v > 0) { setMuted(false); setMutedState(false); }
+  }
+
+  const icon = muted || volume === 0 ? "🔇" : volume < 0.4 ? "🔉" : "🔊";
+
+  return (
+    <div style={{ position:"fixed", bottom:20, right:20, zIndex:50, display:"flex", alignItems:"center", gap:8, background:"rgba(14,14,28,.92)", backdropFilter:"blur(10px)", border:"1px solid #2a2a40", borderRadius:40, padding: open?"8px 14px":"8px 12px", transition:"all .25s", boxShadow:"0 4px 20px rgba(0,0,0,.4)" }}>
+      <button onClick={toggleMute} onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}
+        style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", lineHeight:1, padding:0 }} title={muted?"Unmute":"Mute"}>
+        {icon}
+      </button>
+      <div onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}
+        style={{ width:open?80:0, overflow:"hidden", transition:"width .25s", display:"flex", alignItems:"center" }}>
+        <input type="range" min={0} max={1} step={0.02} value={muted?0:volume}
+          onChange={handleVolume}
+          style={{ width:80, accentColor:"#7c6af6", cursor:"pointer" }}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Inner app ─────────────────────────────────────────────────────────────────
 function Inner() {
   const { isLoggedIn, username, signOut } = useUser();
   const [screen, setScreen] = useState("home");
+
   useEffect(() => {
     startKeepalive();
-    return () => stopKeepalive();
+    return () => { stopKeepalive(); stopBG(); };
   }, []);
+
+  // Start BG music once user is logged in (guarantees a prior user gesture)
+  useEffect(() => {
+    if (isLoggedIn && screen === "home") startBG();
+  }, [isLoggedIn, screen]);
+
   if (!isLoggedIn) return <AuthModal />;
-  if (screen === "gamedle")  return <ScreenWrap onBack={()=>setScreen("home")} label="🏆 GAMEDLE"   accent="#f0c030"><Gamedle  onBack={()=>setScreen("home")}/></ScreenWrap>;
-  if (screen === "infinite") return <ScreenWrap onBack={()=>setScreen("home")} label="♾️ INFINITE"  accent="#9b87f8"><Infinite onBack={()=>setScreen("home")} defaultTab="normal"/></ScreenWrap>;
-  if (screen === "speedrun") return <ScreenWrap onBack={()=>setScreen("home")} label="⚡ SPEEDRUN"  accent="#e09070"><Infinite onBack={()=>setScreen("home")} defaultTab="speedrun"/></ScreenWrap>;
-  if (screen === "index")    return <ScreenWrap onBack={()=>setScreen("home")} label="📚 GAME INDEX" accent="#4ec9b0"><Index    onBack={()=>setScreen("home")}/></ScreenWrap>;
+  if (screen === "gamedle")  return <ScreenWrap onBack={()=>setScreen("home")} label="🏆 GAMEDLE"    accent="#f0c030"><Gamedle  onBack={()=>setScreen("home")}/></ScreenWrap>;
+  if (screen === "infinite") return <ScreenWrap onBack={()=>setScreen("home")} label="♾️ INFINITE"   accent="#9b87f8"><Infinite onBack={()=>setScreen("home")} defaultTab="normal"/></ScreenWrap>;
+  if (screen === "speedrun") return <ScreenWrap onBack={()=>setScreen("home")} label="⚡ SPEEDRUN"   accent="#e09070"><Infinite onBack={()=>setScreen("home")} defaultTab="speedrun"/></ScreenWrap>;
+  if (screen === "index")    return <ScreenWrap onBack={()=>setScreen("home")} label="📚 GAME INDEX"  accent="#4ec9b0"><Index    onBack={()=>setScreen("home")}/></ScreenWrap>;
 
   return (
     <div style={{ minHeight:"100vh", background:"#080810", fontFamily:"'Segoe UI',system-ui,sans-serif", padding:"0 20px 40px" }}>
       <style>{CSS}</style>
+      <VolumeControl />
       <div style={{ maxWidth:520, margin:"0 auto", display:"flex", justifyContent:"flex-end", alignItems:"center", paddingTop:16, gap:10 }}>
         <span style={{ fontSize:12, color:"#4a4a6a" }}>👤 {username}</span>
         <button className="sign-out" onClick={signOut} style={{ fontSize:11, color:"#3a3a5a", background:"none", border:"1px solid #1a1a28", borderRadius:8, padding:"4px 10px", cursor:"pointer", transition:"color .2s" }}>Sign out</button>
