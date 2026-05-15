@@ -56,52 +56,94 @@ function GameDetail({ game, onClose }) {
   const [imgIdx, setImgIdx] = useState(0);
   const images = [game.cover, ...(game.screenshots ?? [])].filter(Boolean);
 
+  const prev = (e) => { e.stopPropagation(); setImgIdx(i => (i - 1 + images.length) % images.length); };
+  const next = (e) => { e.stopPropagation(); setImgIdx(i => (i + 1) % images.length); };
+
   useEffect(() => {
-    const h = e => { if (e.key === "Escape") onClose(); };
+    const h = e => {
+      if (e.key === "Escape")     onClose();
+      if (e.key === "ArrowLeft")  setImgIdx(i => (i - 1 + images.length) % images.length);
+      if (e.key === "ArrowRight") setImgIdx(i => (i + 1) % images.length);
+    };
     window.addEventListener("keydown", h);
     document.body.style.overflow = "hidden";
     return () => { window.removeEventListener("keydown", h); document.body.style.overflow = ""; };
-  }, [onClose]);
+  }, [onClose, images.length]); // eslint-disable-line
+
+  const ArrowBtn = ({ label, onClick, side }) => (
+    <button onClick={onClick} style={{
+      position: "absolute", top: "50%", transform: "translateY(-50%)",
+      [side]: 10, zIndex: 3,
+      width: 34, height: 34, borderRadius: "50%",
+      background: "rgba(0,0,0,.62)", backdropFilter: "blur(6px)",
+      border: "1px solid rgba(255,255,255,.13)",
+      color: "#d0d0f0", fontSize: 18, lineHeight: 1, cursor: "pointer",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      transition: "background .15s, border-color .15s",
+    }}
+    onMouseEnter={e => { e.currentTarget.style.background = "rgba(124,106,246,.6)"; e.currentTarget.style.borderColor = "#7c6af6"; }}
+    onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,.62)";      e.currentTarget.style.borderColor = "rgba(255,255,255,.13)"; }}>
+      {label}
+    </button>
+  );
 
   return (
     <div onClick={e => e.target === e.currentTarget && onClose()}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 200,
-        display: "flex", alignItems: "flex-end", justifyContent: "center",
-        backdropFilter: "blur(5px)" }}>
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.82)", zIndex: 200,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        backdropFilter: "blur(8px)", padding: 16 }}>
       <style>{SPIN}</style>
-      <div style={{ width: "100%", maxWidth: 560, maxHeight: "93vh", overflowY: "auto",
-        background: "#0d0d1c", borderTop: "1px solid #2a2a40",
-        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        animation: "slideUp .28s ease both" }}>
-
-        {/* Drag handle */}
-        <div style={{ textAlign: "center", padding: "10px 0 2px" }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "#2a2a40", display: "inline-block" }} />
-        </div>
+      <div style={{ width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto",
+        background: "#0d0d1c", border: "1px solid #252535",
+        borderRadius: 20,
+        animation: "slideUp .25s cubic-bezier(.16,1,.3,1) both",
+        boxShadow: "0 28px 80px rgba(0,0,0,.85)" }}>
 
         {/* Image gallery */}
-        <div style={{ position: "relative", height: 228, overflow: "hidden", background: "#080810" }}>
+        <div style={{ position: "relative", height: 240, overflow: "hidden",
+          background: "#080810", borderRadius: "20px 20px 0 0" }}>
           {images[imgIdx] && (
-            <img src={images[imgIdx]} alt={game.title}
-              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top", opacity: .88 }} />
+            <img key={imgIdx} src={images[imgIdx]} alt={game.title}
+              style={{ width: "100%", height: "100%", objectFit: "cover",
+                objectPosition: "top", opacity: .92,
+                animation: "fadeUp .18s ease both" }} />
           )}
           <div style={{ position: "absolute", inset: 0,
-            background: "linear-gradient(to bottom, transparent 35%, #0d0d1c 100%)" }} />
+            background: "linear-gradient(to bottom, transparent 40%, #0d0d1c 100%)",
+            pointerEvents: "none" }} />
 
+          {/* Left / right arrows */}
+          {images.length > 1 && <ArrowBtn label="‹" onClick={prev} side="left" />}
+          {images.length > 1 && <ArrowBtn label="›" onClick={next} side="right" />}
+
+          {/* Dot indicators */}
           {images.length > 1 && (
             <div style={{ position: "absolute", bottom: 10, left: 0, right: 0,
-              display: "flex", gap: 5, justifyContent: "center" }}>
+              display: "flex", gap: 5, justifyContent: "center", zIndex: 2,
+              pointerEvents: "none" }}>
               {images.map((_, i) => (
-                <button key={i} onClick={() => setImgIdx(i)} style={{
-                  width: i === imgIdx ? 22 : 6, height: 6, borderRadius: 3, border: "none",
+                <div key={i} style={{
+                  width: i === imgIdx ? 20 : 6, height: 6, borderRadius: 3,
                   background: i === imgIdx ? "#7c6af6" : "#3a3a5a",
-                  cursor: "pointer", transition: "all .2s", padding: 0 }} />
+                  transition: "all .25s" }} />
               ))}
             </div>
           )}
 
+          {/* Counter pill */}
+          {images.length > 1 && (
+            <div style={{ position: "absolute", top: 12, left: 12, zIndex: 3,
+              fontSize: 10, color: "#a0a0c0",
+              background: "rgba(0,0,0,.62)", backdropFilter: "blur(4px)",
+              padding: "3px 9px", borderRadius: 20,
+              border: "1px solid rgba(255,255,255,.08)" }}>
+              {imgIdx + 1} / {images.length}
+            </div>
+          )}
+
+          {/* Close */}
           <button onClick={onClose} style={{
-            position: "absolute", top: 12, right: 12, width: 30, height: 30,
+            position: "absolute", top: 12, right: 12, width: 30, height: 30, zIndex: 3,
             borderRadius: "50%", background: "rgba(0,0,0,.65)", border: "1px solid #3a3a5a",
             color: "#c0c0e0", cursor: "pointer", fontSize: 13,
             display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
@@ -210,7 +252,7 @@ function GameDetail({ game, onClose }) {
   );
 }
 
-// ── Game tile (compact grid card) ──────────────────────────────────────────────
+// ── Game tile (cover-fill with bottom overlay) ────────────────────────────────
 function GameTile({ game, rank, onClick, animDelay }) {
   const [hovered, setHovered] = useState(false);
 
@@ -229,86 +271,76 @@ function GameTile({ game, rank, onClick, animDelay }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        background: hovered ? "#13132a" : "#0e0e1e",
-        border: `1px solid ${hovered ? "#3a3a60" : "#1a1a2c"}`,
-        borderRadius: 12,
+        display: "block",
+        width: "100%",
+        aspectRatio: "3/4",
+        background: "#0a0a18",
+        border: `1px solid ${hovered ? "#4a4a70" : "#1a1a2c"}`,
+        borderRadius: 10,
         overflow: "hidden",
         cursor: "pointer",
-        textAlign: "left",
         padding: 0,
         transition: "border-color .15s, transform .15s, box-shadow .15s",
-        transform: hovered ? "translateY(-2px)" : "none",
-        boxShadow: hovered ? "0 6px 24px rgba(0,0,0,.5)" : "0 2px 8px rgba(0,0,0,.3)",
+        transform: hovered ? "scale(1.03)" : "scale(1)",
+        boxShadow: hovered ? "0 8px 28px rgba(0,0,0,.7)" : "0 2px 8px rgba(0,0,0,.4)",
         animation: `tileIn .3s ease ${animDelay}s both`,
       }}>
 
-      {/* Cover art */}
-      <div style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#0a0a18", flexShrink: 0 }}>
-        {game.cover
-          ? <img src={game.cover} alt={game.title}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-          : <div style={{ width: "100%", height: "100%", display: "flex",
-              alignItems: "center", justifyContent: "center", fontSize: 28 }}>🎮</div>
-        }
+      {/* Cover image — fills entire tile */}
+      {game.cover
+        ? <img src={game.cover} alt={game.title}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+              objectFit: "cover", display: "block",
+              transition: "transform .3s ease",
+              transform: hovered ? "scale(1.06)" : "scale(1)",
+            }} />
+        : <div style={{ position: "absolute", inset: 0, display: "flex",
+            alignItems: "center", justifyContent: "center", fontSize: 32,
+            color: "#3a3a5a" }}>🎮</div>
+      }
 
-        {/* Gradient overlay at bottom of cover */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "45%",
-          background: "linear-gradient(to top, rgba(8,8,20,.95) 0%, transparent 100%)",
-          pointerEvents: "none" }} />
+      {/* Rank badge — top left */}
+      {medalLabel && (
+        <div style={{
+          position: "absolute", top: 6, left: 6, zIndex: 2,
+          fontSize: rank <= 3 ? 13 : 9, fontWeight: 800,
+          color: rank <= 3 ? ["#f0c030","#d0d0d0","#cd7f32"][rank-1] : "#888",
+          background: "rgba(0,0,0,.72)", backdropFilter: "blur(4px)",
+          padding: "2px 6px", borderRadius: 5, lineHeight: 1.5,
+          border: rank <= 3 ? `1px solid ${["#f0c03044","#c0c0c044","#cd7f3244"][rank-1]}` : "1px solid #ffffff10",
+        }}>
+          {medalLabel}
+        </div>
+      )}
 
-        {/* Rating badge — top right */}
-        {game.rating && (
-          <div style={{
-            position: "absolute", top: 6, right: 6,
-            fontSize: 10, fontWeight: 800, color: scoreColor,
-            background: "rgba(0,0,0,.75)", backdropFilter: "blur(4px)",
-            padding: "2px 6px", borderRadius: 6,
-            border: `1px solid ${scoreColor}44`,
-          }}>
-            {game.rating}
-          </div>
-        )}
-
-        {/* Rank badge — top left */}
-        {medalLabel && (
-          <div style={{
-            position: "absolute", top: 6, left: 6,
-            fontSize: rank <= 3 ? 14 : 9, fontWeight: 700,
-            color: rank <= 3 ? ["#f0c030","#c0c0c0","#cd7f32"][rank-1] : "#3a3a5a",
-            background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)",
-            padding: rank <= 3 ? "2px 5px" : "2px 6px", borderRadius: 6,
-            lineHeight: 1.4,
-          }}>
-            {medalLabel}
-          </div>
-        )}
-      </div>
-
-      {/* Info row below cover */}
-      <div style={{ padding: "8px 9px 9px", flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-
+      {/* Bottom gradient + info overlay */}
+      <div style={{
+        position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
+        background: "linear-gradient(to top, rgba(4,4,14,1) 0%, rgba(4,4,14,.85) 55%, transparent 100%)",
+        padding: "28px 8px 8px",
+      }}>
         {/* Title */}
         <div style={{
-          fontSize: 12, fontWeight: 700, color: "#ddddf8", lineHeight: 1.3,
+          fontSize: 11, fontWeight: 700, color: "#eeeef8", lineHeight: 1.35,
           overflow: "hidden", display: "-webkit-box",
           WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+          marginBottom: 4,
+          textShadow: "0 1px 4px rgba(0,0,0,.8)",
         }}>
           {game.title}
         </div>
 
-        {/* Year + first genre tag */}
-        <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 1 }}>
-          {game.year && (
-            <span style={{ fontSize: 10, color: "#3a3a5a" }}>{game.year}</span>
-          )}
-          {game.genre && (
+        {/* Year + rating row */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 9, color: "#5a5a7a" }}>{game.year ?? ""}</span>
+          {game.rating && (
             <span style={{
-              fontSize: 9, padding: "1px 6px", borderRadius: 20,
-              background: "rgba(124,106,246,.12)", color: "#8878e8",
+              fontSize: 10, fontWeight: 800, color: scoreColor,
+              background: "rgba(0,0,0,.6)",
+              padding: "1px 5px", borderRadius: 5,
+              border: `1px solid ${scoreColor}55`,
             }}>
-              {game.genre.split(" / ")[0]}
+              {game.rating}
             </span>
           )}
         </div>
