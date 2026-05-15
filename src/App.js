@@ -23,7 +23,7 @@ function ScreenWrap({ children, onBack, label, accent }) {
     <div style={{ minHeight:"100vh", background:"#080810", fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
       <div style={{ background:"rgba(8,8,16,.97)", backdropFilter:"blur(12px)", borderBottom:"1px solid #151520", padding:"12px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:20 }}>
         <button onClick={onBack} style={{ fontSize:12, color:"#6b6b8a", background:"none", border:"1px solid #1e1e2e", borderRadius:8, padding:"5px 10px", cursor:"pointer" }}>← Back</button>
-        <span style={{ fontSize:14, fontWeight:700, color:accent, letterSpacing:".04em" }}>{label}</span>
+        <span style={{ fontSize:14, fontWeight:700, color:accent, lettennpmrSpacing:".04em" }}>{label}</span>
       </div>
       <div style={{ padding:"28px 20px", maxWidth:560, margin:"0 auto" }}>{children}</div>
     </div>

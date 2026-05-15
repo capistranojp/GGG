@@ -1,7 +1,6 @@
 /**
- * src/Index.js — Game Library / Index
- * Browse top games by popularity, or search any title.
- * Tap a game card to see full details: synopsis, ratings, platforms, store links.
+ * src/Library.js — Game Library / Index
+ * Compact tile grid layout — tap a tile to see full details.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { fetchIndexGames, searchGames } from "./igdb";
@@ -10,9 +9,10 @@ const SPIN = `
   @keyframes spin    { to { transform:rotate(360deg); } }
   @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
   @keyframes slideUp { from{opacity:0;transform:translateY(40px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes tileIn  { from{opacity:0;transform:scale(.94)} to{opacity:1;transform:scale(1)} }
 `;
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Sub-components ─────────────────────────────────────────────────────────────
 
 function RatingBar({ score, count, label, color }) {
   if (!score) return null;
@@ -51,7 +51,7 @@ function PlatformChip({ name }) {
   );
 }
 
-// ── Detail modal (bottom sheet) ───────────────────────────────────────────────
+// ── Detail modal (bottom sheet) ────────────────────────────────────────────────
 function GameDetail({ game, onClose }) {
   const [imgIdx, setImgIdx] = useState(0);
   const images = [game.cover, ...(game.screenshots ?? [])].filter(Boolean);
@@ -210,83 +210,115 @@ function GameDetail({ game, onClose }) {
   );
 }
 
-// ── Game card (list row) ──────────────────────────────────────────────────────
-function GameCard({ game, rank, onClick }) {
+// ── Game tile (compact grid card) ──────────────────────────────────────────────
+function GameTile({ game, rank, onClick, animDelay }) {
   const [hovered, setHovered] = useState(false);
+
   const scoreColor = !game.rating ? null
     : game.rating >= 80 ? "#6fe0a0"
     : game.rating >= 60 ? "#f0c030" : "#e07070";
 
+  const medalLabel = rank != null && rank <= 3
+    ? ["🥇","🥈","🥉"][rank - 1]
+    : rank != null ? `#${rank}` : null;
+
   return (
-    <button onClick={onClick}
+    <button
+      onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ width: "100%", display: "flex", gap: 12, alignItems: "flex-start",
-        padding: "11px 8px", background: hovered ? "rgba(124,106,246,.04)" : "none",
-        border: "none", borderBottom: "1px solid #111120",
-        cursor: "pointer", textAlign: "left", transition: "background .15s",
-        borderRadius: hovered ? 10 : 0 }}>
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        background: hovered ? "#13132a" : "#0e0e1e",
+        border: `1px solid ${hovered ? "#3a3a60" : "#1a1a2c"}`,
+        borderRadius: 12,
+        overflow: "hidden",
+        cursor: "pointer",
+        textAlign: "left",
+        padding: 0,
+        transition: "border-color .15s, transform .15s, box-shadow .15s",
+        transform: hovered ? "translateY(-2px)" : "none",
+        boxShadow: hovered ? "0 6px 24px rgba(0,0,0,.5)" : "0 2px 8px rgba(0,0,0,.3)",
+        animation: `tileIn .3s ease ${animDelay}s both`,
+      }}>
 
-      {rank != null && (
-        <span style={{ fontSize: 11, minWidth: 26, paddingTop: 3, flexShrink: 0,
-          fontWeight: 700, color: rank <= 3 ? ["#f0c030","#c0c0c0","#cd7f32"][rank-1] : "#2a2a3a" }}>
-          {rank <= 3 ? ["🥇","🥈","🥉"][rank-1] : `${rank}.`}
-        </span>
-      )}
-
-      <div style={{ width: 50, height: 66, borderRadius: 8, overflow: "hidden",
-        flexShrink: 0, background: "#161622" }}>
+      {/* Cover art */}
+      <div style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#0a0a18", flexShrink: 0 }}>
         {game.cover
           ? <img src={game.cover} alt={game.title}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           : <div style={{ width: "100%", height: "100%", display: "flex",
-              alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎮</div>
+              alignItems: "center", justifyContent: "center", fontSize: 28 }}>🎮</div>
         }
-      </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#e0e0f8", marginBottom: 2,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {game.title}
-        </div>
-        <div style={{ fontSize: 11, color: "#4a4a6a", marginBottom: 5,
-          display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {game.year && <span>{game.year}</span>}
-          {game.developer && <><span style={{ color: "#2a2a3a" }}>·</span><span>{game.developer}</span></>}
-        </div>
-        {game.genre && (
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {game.genre.split(" / ").slice(0, 3).map(g => (
-              <span key={g} style={{ fontSize: 10, padding: "1px 7px", borderRadius: 20,
-                background: "rgba(124,106,246,.1)", color: "#8878e8" }}>{g}</span>
-            ))}
+        {/* Gradient overlay at bottom of cover */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "45%",
+          background: "linear-gradient(to top, rgba(8,8,20,.95) 0%, transparent 100%)",
+          pointerEvents: "none" }} />
+
+        {/* Rating badge — top right */}
+        {game.rating && (
+          <div style={{
+            position: "absolute", top: 6, right: 6,
+            fontSize: 10, fontWeight: 800, color: scoreColor,
+            background: "rgba(0,0,0,.75)", backdropFilter: "blur(4px)",
+            padding: "2px 6px", borderRadius: 6,
+            border: `1px solid ${scoreColor}44`,
+          }}>
+            {game.rating}
           </div>
         )}
-        {game.summary && (
-          <p style={{ fontSize: 11, color: "#3a3a5a", margin: "5px 0 0", lineHeight: 1.5,
-            overflow: "hidden", display: "-webkit-box",
-            WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-            {game.summary}
-          </p>
+
+        {/* Rank badge — top left */}
+        {medalLabel && (
+          <div style={{
+            position: "absolute", top: 6, left: 6,
+            fontSize: rank <= 3 ? 14 : 9, fontWeight: 700,
+            color: rank <= 3 ? ["#f0c030","#c0c0c0","#cd7f32"][rank-1] : "#3a3a5a",
+            background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)",
+            padding: rank <= 3 ? "2px 5px" : "2px 6px", borderRadius: 6,
+            lineHeight: 1.4,
+          }}>
+            {medalLabel}
+          </div>
         )}
       </div>
 
-      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column",
-        alignItems: "flex-end", gap: 4, paddingTop: 2 }}>
-        {game.rating && (
-          <span style={{ fontSize: 12, fontWeight: 800, color: scoreColor,
-            background: "rgba(0,0,0,.35)", padding: "2px 7px", borderRadius: 8 }}>
-            {game.rating}
-          </span>
-        )}
-        <span style={{ fontSize: 10, color: "#2a2a3a" }}>↗</span>
+      {/* Info row below cover */}
+      <div style={{ padding: "8px 9px 9px", flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+
+        {/* Title */}
+        <div style={{
+          fontSize: 12, fontWeight: 700, color: "#ddddf8", lineHeight: 1.3,
+          overflow: "hidden", display: "-webkit-box",
+          WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+        }}>
+          {game.title}
+        </div>
+
+        {/* Year + first genre tag */}
+        <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 1 }}>
+          {game.year && (
+            <span style={{ fontSize: 10, color: "#3a3a5a" }}>{game.year}</span>
+          )}
+          {game.genre && (
+            <span style={{
+              fontSize: 9, padding: "1px 6px", borderRadius: 20,
+              background: "rgba(124,106,246,.12)", color: "#8878e8",
+            }}>
+              {game.genre.split(" / ")[0]}
+            </span>
+          )}
+        </div>
       </div>
     </button>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-export default function Index() {
+// ── Main component ─────────────────────────────────────────────────────────────
+export default function Library() {
   const [query,       setQuery]       = useState("");
   const [games,       setGames]       = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -391,7 +423,7 @@ export default function Index() {
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading spinner */}
       {loading && (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", minHeight: 220, gap: 12 }}>
@@ -402,7 +434,7 @@ export default function Index() {
         </div>
       )}
 
-      {/* List */}
+      {/* Tile grid */}
       {!loading && (
         <>
           {games.length === 0 && !error && (
@@ -413,13 +445,22 @@ export default function Index() {
               </p>
             </div>
           )}
-          {games.map((g, i) => (
-            <div key={g.id}
-              style={{ animation: `fadeUp .3s ease ${Math.min(i, 12) * 0.025}s both` }}>
-              <GameCard game={g} rank={isSearch ? null : i + 1}
-                onClick={() => setSelected(g)} />
-            </div>
-          ))}
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 8,
+          }}>
+            {games.map((g, i) => (
+              <GameTile
+                key={g.id}
+                game={g}
+                rank={isSearch ? null : i + 1}
+                onClick={() => setSelected(g)}
+                animDelay={Math.min(i, 17) * 0.03}
+              />
+            ))}
+          </div>
 
           {/* Load more */}
           {hasMore && !isSearch && (
